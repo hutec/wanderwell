@@ -7,6 +7,10 @@
 	let routes = $state([]);
 	let loading = $state(true);
 
+	const formatDistance = (distance: number) => {
+		return `${distance.toFixed(2)} km`;
+	};
+
 	// fetch routes for given userID
 	$effect(() => {
 		if (!userID) {
@@ -33,32 +37,39 @@
 	});
 </script>
 
-<div class="flex h-full flex-col gap-y-3">
+<div class="flex h-full flex-col gap-3">
 	{#if loading}
-		<p>Loading routes...</p>
+		<p class="text-sm text-slate-500">Loading routes...</p>
 	{:else if routes.length === 0}
-		<p>No routes found.</p>
+		<p class="text-sm text-slate-500">No routes found.</p>
 	{:else}
-		<button class="btn bg-base-100 top-0 z-10 rounded" onclick={() => (routesState.routes = [])}
-			>Reset Selection</button
+		<button
+			type="button"
+			class="self-start rounded-md border border-amber-300 bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-900 transition hover:bg-amber-200"
+			onclick={() => (routesState.routes = [])}
 		>
-		<ul class="list rounded-box bg-base-100 flex-1 overflow-auto shadow-md">
+			Reset selection
+		</button>
+
+		<ul class="flex-1 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
 			{#each routes as route (route.id)}
-				<li class="list-row py-2">
-					<div class="self-center">
+				<li class="border-b border-slate-100 last:border-b-0">
+					<label
+						class="flex cursor-pointer items-start gap-3 px-4 py-3 transition hover:bg-slate-50"
+					>
 						<input
 							type="checkbox"
-							class="checkbox"
+							class="mt-0.5 h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-400"
 							value={route.id}
 							bind:group={routesState.routes}
 						/>
-					</div>
-					<div>
-						<div>{route.name}</div>
-						<div class="text-xs font-semibold opacity-60">
-							{new Date(route.start_date).toLocaleDateString()}
+						<div class="min-w-0">
+							<div class="truncate text-sm font-medium text-slate-900">{route.name}</div>
+							<div class="text-xs text-slate-500">
+								{new Date(route.start_date).toLocaleDateString()} · {formatDistance(route.distance)}
+							</div>
 						</div>
-					</div>
+					</label>
 				</li>
 			{/each}
 		</ul>
