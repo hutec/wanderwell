@@ -39,13 +39,11 @@
 		if (style.layers) {
 			const routeLayer = style.layers.find((layer) => layer.id === 'Route');
 			if (routeLayer && routesState.routes.length > 0) {
-				// Filter to show only selected routes
 				routeLayer.filter = [
 					'all',
 					['in', 'id', ...routesState.routes.map((routeId) => String(routeId))]
 				];
 			} else if (routeLayer) {
-				// Remove filter if no routes selected
 				delete routeLayer.filter;
 			}
 		}
@@ -54,41 +52,53 @@
 	});
 </script>
 
-<div class="flex h-screen w-full">
-	<div
-		class="flex h-screen w-sm flex-col space-y-4 overflow-hidden border-r border-gray-300 bg-gray-100 p-4"
-	>
-		{#if authState.isAuthenticated}
-			<div class="flex items-center justify-between">
-				<p class="text-gray-700">
-					Logged in as <strong>{authState.currentUser?.name}</strong>
-				</p>
-				<button class="rounded bg-red-500 px-3 py-1 text-white hover:bg-red-600" onclick={logout}>
-					Logout
-				</button>
-			</div>
-			<div class="h-full min-h-0 flex-1 overflow-auto">
-				<RouteList userID={authState.currentUser?.id} />
-			</div>
-		{:else}
-			<div class="flex items-center justify-end">
-				<button
-					class="rounded bg-green-500 px-3 py-1 text-white hover:bg-green-600"
-					onclick={login}
-				>
-					Login
-				</button>
-			</div>
-		{/if}
-	</div>
+<div class="flex h-screen w-full bg-slate-100 text-slate-900">
+	<aside class="flex h-full w-80 shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm">
+		<div class="border-b border-slate-200 px-4 py-3">
+			<h1 class="text-base font-semibold tracking-tight">Wanderwell</h1>
+			<p class="mt-0.5 text-xs text-slate-500">Route explorer</p>
+		</div>
 
-	<div class="min-h-0 flex-1">
+		<div class="flex min-h-0 flex-1 flex-col p-4">
+			{#if authState.isAuthenticated}
+				<div class="mb-4 flex items-start justify-between gap-3">
+					<p class="text-sm text-slate-600">
+						Logged in as
+						<span class="font-semibold text-slate-900">{authState.currentUser?.name}</span>
+					</p>
+					<button
+						type="button"
+						class="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 transition hover:bg-rose-100 focus:ring-2 focus:ring-rose-400 focus:ring-offset-2 focus:outline-none"
+						onclick={logout}
+					>
+						Logout
+					</button>
+				</div>
+
+				<div class="min-h-0 flex-1">
+					<RouteList userID={authState.currentUser?.id} />
+				</div>
+			{:else}
+				<div class="flex h-full items-start justify-end">
+					<button
+						type="button"
+						class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:outline-none"
+						onclick={login}
+					>
+						Login
+					</button>
+				</div>
+			{/if}
+		</div>
+	</aside>
+
+	<main class="min-h-0 flex-1">
 		{#if activeMapStyle}
 			<MapLibre class="h-full w-full" style={activeMapStyle} />
 		{:else}
-			<div class="flex h-full w-full items-center justify-center bg-gray-200">
-				<p class="text-gray-600">Loading map...</p>
+			<div class="flex h-full w-full items-center justify-center bg-slate-200">
+				<p class="text-sm text-slate-600">Loading map...</p>
 			</div>
 		{/if}
-	</div>
+	</main>
 </div>
