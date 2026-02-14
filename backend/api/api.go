@@ -75,11 +75,11 @@ func (s *Server) RequireAuth(next http.Handler) http.Handler {
 func (s *Server) setupRoutes() {
 	// CORS configuration
 	s.router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"}, // Allow all origins
+		AllowedOrigins:   []string{"http://localhost:5173"}, // Allow all origins
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: false,
+		AllowCredentials: true,
 		MaxAge:           300, // Maximum value not ignored by any of major browsers
 	}))
 
@@ -169,6 +169,16 @@ func (s *Server) serveGeojsonForUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) initiateAuthentication(w http.ResponseWriter, r *http.Request) {
+	redirectURL := r.URL.Query().Get("redirect_url")
+	if redirectURL == "" {
+		http.Error(w, "Missing redirect_url parameter", http.StatusBadRequest)
+		return
+	}
+
+	session, _ := gothic.Store.New(r, "user-session")
+	session.Values["redirect_url"] = redirectURL
+	session.Save(r, w)
+
 	r = r.WithContext(context.WithValue(r.Context(), "provider", "strava"))
 	gothic.BeginAuthHandler(w, r)
 }
@@ -205,12 +215,20 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request) {
 	// Set a session cookie
 	session, _ := gothic.Store.New(r, "user-session")
 	session.Values["user_id"] = userID
+
+	// Get the redirect URL from session
+	redirectURL, ok := session.Values["redirect_url"].(string)
+	if !ok || redirectURL == "" {
+		http.Error(w, "No redirect URL found", http.StatusInternalServerError)
+		return
+	}
+
+	// Clean up redirect_url from session
+	delete(session.Values, "redirect_url")
+
 	session.Save(r, w)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"user": user,
-	})
+	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 
 	// start background task to fetch and cache user activities
 	// go func() {
