@@ -16,7 +16,7 @@
 		}
 
 		loading = true;
-		fetch(apiEndpoint(`/${userID}/route_details`))
+		fetch(apiEndpoint(`/route_details`), { credentials: 'include' })
 			.then((res) => res.json())
 			.then((data: unknown) => {
 				if (Array.isArray(data)) {

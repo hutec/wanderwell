@@ -1,12 +1,17 @@
 <script lang="ts">
-	import UserSelect from '$lib/UserSelect.svelte';
 	import RouteList from '$lib/RouteList.svelte';
-	import { userState, routesState } from '$lib/state.svelte';
+	import { routesState } from '$lib/state.svelte';
 	import { getBaseStyle } from '$lib/mapStyle.svelte';
 	import { tileServerEndpoint } from '$lib/config';
+	import { checkAuth, login, logout, authState } from '$lib/auth.svelte';
 
 	import { MapLibre } from 'svelte-maplibre-gl';
 	import type { StyleSpecification } from 'maplibre-gl';
+
+	// Check authentication on page load
+	$effect(() => {
+		checkAuth();
+	});
 
 	// Reactive map style that updates when user changes
 	let mapStyle = $state<StyleSpecification | null>(null);
@@ -26,8 +31,8 @@
 		const style = JSON.parse(JSON.stringify(mapStyle));
 
 		// Update the AllRoutes source URL based on userID
-		if (userState.user?.id && style.sources && style.sources.AllRoutes) {
-			style.sources.AllRoutes.url = tileServerEndpoint(`/data/${userState.user.id}.json`);
+		if (authState.isAuthenticated && style.sources && style.sources.AllRoutes) {
+			style.sources.AllRoutes.url = tileServerEndpoint(`/data/${authState.currentUser?.id}.json`);
 		}
 
 		// Add filter to Route layer based on selected route IDs
@@ -53,12 +58,26 @@
 	<div
 		class="flex h-screen w-sm flex-col space-y-4 overflow-hidden border-r border-gray-300 bg-gray-100 p-4"
 	>
-		<div class="self-center">
-			<UserSelect />
-		</div>
-		{#if userState.user}
+		{#if authState.isAuthenticated}
+			<div class="flex items-center justify-between">
+				<p class="text-gray-700">
+					Logged in as <strong>{authState.currentUser?.name}</strong>
+				</p>
+				<button class="rounded bg-red-500 px-3 py-1 text-white hover:bg-red-600" onclick={logout}>
+					Logout
+				</button>
+			</div>
 			<div class="h-full min-h-0 flex-1 overflow-auto">
-				<RouteList userID={userState.user.id} />
+				<RouteList userID={authState.currentUser?.id} />
+			</div>
+		{:else}
+			<div class="flex items-center justify-end">
+				<button
+					class="rounded bg-green-500 px-3 py-1 text-white hover:bg-green-600"
+					onclick={login}
+				>
+					Login
+				</button>
 			</div>
 		{/if}
 	</div>
