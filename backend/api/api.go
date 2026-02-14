@@ -89,6 +89,7 @@ func (s *Server) setupRoutes() {
 	// Protected routes - require authentication
 	s.router.Group(func(r chi.Router) {
 		r.Use(s.RequireAuth)
+		r.Get("/me", s.getCurrentUser)
 		r.Get("/routes", s.listRoutesWithRouteData)
 		r.Get("/route_details", s.listRoutesWithoutRouteData)
 		r.Get("/geojson", s.serveGeojsonForUser)
@@ -116,6 +117,34 @@ func parseUserID(r *http.Request) (int64, error) {
 		return 0, fmt.Errorf("invalid user ID: %w", err)
 	}
 	return userID, nil
+}
+
+func (s *Server) getCurrentUser(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(userIDKey).(int64)
+	if !ok {
+		http.Error(w, "user_id not found in context", http.StatusUnauthorized)
+		return
+	}
+
+	// Fetch user from database
+	var user models.User
+	err := s.db.QueryRow(
+		"SELECT id, firstname, lastname FROM user WHERE id = ?",
+		userID,
+	).Scan(&user.ID, &user.Firstname, &user.Lastname)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
+		slog.Error("Failed to fetch user", "error", err)
+		http.Error(w, "Failed to fetch user", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(user)
 }
 
 func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
