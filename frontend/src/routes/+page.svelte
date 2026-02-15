@@ -82,7 +82,15 @@
 							Logout
 						</button>
 					</div>
-
+					<div class="mb-4 flex">
+						<button
+							type="button"
+							class="self-start rounded-md border border-amber-300 bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-900 transition hover:bg-amber-200"
+							onclick={() => (routesState.routes = [])}
+						>
+							Reset selection
+						</button>
+					</div>
 					<div class="min-h-0 flex-1">
 						<RouteList userID={authState.currentUser?.id} />
 					</div>

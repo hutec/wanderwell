@@ -43,14 +43,6 @@
 	{:else if routes.length === 0}
 		<p class="text-sm text-slate-500">No routes found.</p>
 	{:else}
-		<button
-			type="button"
-			class="self-start rounded-md border border-amber-300 bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-900 transition hover:bg-amber-200"
-			onclick={() => (routesState.routes = [])}
-		>
-			Reset selection
-		</button>
-
 		<ul class="flex-1 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
 			{#each routes as route (route.id)}
 				<li class="border-b border-slate-100 last:border-b-0">
