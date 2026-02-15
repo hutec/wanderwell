@@ -82,13 +82,20 @@
 							Logout
 						</button>
 					</div>
-					<div class="mb-4 flex">
+					<div class="mb-4 flex gap-3">
 						<button
 							type="button"
 							class="self-start rounded-md border border-amber-300 bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-900 transition hover:bg-amber-200"
 							onclick={() => (routesState.routes = [])}
 						>
 							Reset selection
+						</button>
+						<button
+							type="button"
+							class="self-start rounded-md border border-amber-300 bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-900 transition hover:bg-amber-200"
+							onclick={() => (routesState.routes = [])}
+						>
+							Snap to selection
 						</button>
 					</div>
 					<div class="min-h-0 flex-1">
