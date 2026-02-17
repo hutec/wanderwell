@@ -34,7 +34,7 @@
 			if (routeLayer && routesState.routes.length > 0) {
 				routeLayer.filter = [
 					'all',
-					['in', 'id', ...routesState.routes.map((routeId) => String(routeId))]
+					['in', 'id', ...routesState.routes.map((route) => String(route.id))]
 				];
 			} else if (routeLayer) {
 				delete routeLayer.filter;

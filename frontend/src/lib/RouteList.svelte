@@ -53,7 +53,7 @@
 						<input
 							type="checkbox"
 							class="mt-0.5 h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-400"
-							value={route.id}
+							value={route}
 							bind:group={routesState.routes}
 						/>
 						<div class="min-w-0">
