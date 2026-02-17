@@ -4,9 +4,11 @@
 	import { getBaseStyle } from '$lib/mapStyle.svelte';
 	import { tileServerEndpoint } from '$lib/config';
 	import { checkAuth, login, logout, authState } from '$lib/auth.svelte';
+	import type { Route } from '$lib/types/route';
 
 	import { MapLibre } from 'svelte-maplibre-gl';
 	import type { StyleSpecification } from 'maplibre-gl';
+	import { LngLatBounds } from 'maplibre-gl';
 
 	$effect(() => {
 		checkAuth();
@@ -45,6 +47,21 @@
 	});
 
 	let isSidebarOpen = $state(true);
+
+	const parseBounds = (bounds: string): LngLatBounds => {
+		// Input is LatLng bounds in the format "lat1,lng1,lat2,lng2"
+		if (bounds === '') return new LngLatBounds();
+		const boundsArr = bounds.split(',').map((bound) => Number(bound));
+		// convert to number
+		return new LngLatBounds([boundsArr[1], boundsArr[0]], [boundsArr[3], boundsArr[2]]);
+	};
+
+	const getBounds = (): LngLatBounds => {
+		return routesState.routes.reduce(
+			(bounds: LngLatBounds, route: Route) => bounds.extend(parseBounds(route.bounds)),
+			new LngLatBounds()
+		);
+	};
 </script>
 
 <div class="relative flex h-screen w-full overflow-hidden bg-slate-100 text-slate-900">
