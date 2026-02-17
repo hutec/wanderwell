@@ -7,8 +7,13 @@
 	import type { Route } from '$lib/types/route';
 
 	import { MapLibre } from 'svelte-maplibre-gl';
-	import type { StyleSpecification } from 'maplibre-gl';
-	import { LngLatBounds } from 'maplibre-gl';
+	import type {
+		StyleSpecification,
+		Map as MapLibreMap,
+		LngLatBounds as LngLatBoundsType
+	} from 'maplibre-gl';
+	import maplibregl from 'maplibre-gl';
+	const { LngLatBounds } = maplibregl;
 
 	$effect(() => {
 		checkAuth();
@@ -47,20 +52,33 @@
 	});
 
 	let isSidebarOpen = $state(true);
+	let map = $state<MapLibreMap | undefined>(undefined);
 
-	const parseBounds = (bounds: string): LngLatBounds => {
+	const parseBounds = (bounds: string): LngLatBoundsType => {
 		// Input is LatLng bounds in the format "lat1,lng1,lat2,lng2"
 		if (bounds === '') return new LngLatBounds();
+
 		const boundsArr = bounds.split(',').map((bound) => Number(bound));
-		// convert to number
 		return new LngLatBounds([boundsArr[1], boundsArr[0]], [boundsArr[3], boundsArr[2]]);
 	};
 
-	const getBounds = (): LngLatBounds => {
+	const getBounds = (): LngLatBoundsType => {
 		return routesState.routes.reduce(
-			(bounds: LngLatBounds, route: Route) => bounds.extend(parseBounds(route.bounds)),
+			(bounds: LngLatBoundsType, route: Route) => bounds.extend(parseBounds(route.bounds)),
 			new LngLatBounds()
 		);
+	};
+
+	const snapToSelection = () => {
+		if (!map || routesState.routes.length === 0) return;
+
+		const bounds = getBounds();
+		if (bounds.isEmpty()) return;
+
+		map.fitBounds(bounds, {
+			padding: 48,
+			duration: 600
+		});
 	};
 </script>
 
@@ -110,7 +128,7 @@
 						<button
 							type="button"
 							class="self-start rounded-md border border-amber-300 bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-900 transition hover:bg-amber-200"
-							onclick={() => (routesState.routes = [])}
+							onclick={snapToSelection}
 						>
 							Snap to selection
 						</button>
@@ -144,7 +162,7 @@
 
 	<main class="min-h-0 flex-1">
 		{#if activeMapStyle}
-			<MapLibre class="h-full w-full" style={activeMapStyle} />
+			<MapLibre class="h-full w-full" style={activeMapStyle} bind:map />
 		{:else}
 			<div class="flex h-full w-full items-center justify-center bg-slate-200">
 				<p class="text-sm text-slate-600">Loading map...</p>
