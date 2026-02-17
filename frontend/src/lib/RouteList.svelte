@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { routesState } from '$lib/state.svelte';
 	import { apiEndpoint } from '$lib/config';
+	import type { Route } from '$lib/types/route';
 
 	let { userID } = $props();
 
-	let routes = $state([]);
+	let routes = $state<Route[]>([]);
 	let loading = $state(true);
 
 	const formatDistance = (distance: number) => {
@@ -24,7 +25,7 @@
 			.then((res) => res.json())
 			.then((data: unknown) => {
 				if (Array.isArray(data)) {
-					routes = data as any[];
+					routes = data;
 				} else {
 					routes = [];
 				}
