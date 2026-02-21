@@ -1,7 +1,16 @@
 services:
+  init-backend-data:
+    image: alpine:3.20
+    command: sh -c "chown -R 65532:65532 /home/nonroot"
+    volumes:
+      - backend-data:/data
+    restart: "no"
+
   backend:
     build:
       context: ./backend
+    depends_on:
+      - init-backend-data
     ports:
       - "3000:3000"
     environment:
@@ -9,11 +18,13 @@ services:
       STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET}
       REDIRECT_URI: ${REDIRECT_URI}
       WEBHOOK_URI: ${WEBHOOK_URI}
-      DATABASE_PATH: /home/nonroot/wanderwell.db
+      DATABASE_PATH: /data/wanderwell.db
       SERVER_PORT: ":3000"
       FRONTEND_URL: ${FRONTEND_URL}
       SESSION_SECRET: ${SESSION_SECRET}
       SESSION_KEY: ${SESSION_KEY}
+    volumes:
+      - backend-data:/data
     restart: unless-stopped
 
   frontend:
@@ -27,3 +38,6 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+volumes:
+  backend-data:
