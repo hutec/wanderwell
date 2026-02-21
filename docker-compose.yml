@@ -1,0 +1,29 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "3000:3000"
+    environment:
+      STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID}
+      STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET}
+      REDIRECT_URI: ${REDIRECT_URI}
+      WEBHOOK_URI: ${WEBHOOK_URI}
+      DATABASE_PATH: /home/nonroot/wanderwell.db
+      SERVER_PORT: ":3000"
+      FRONTEND_URL: ${FRONTEND_URL}
+      SESSION_SECRET: ${SESSION_SECRET}
+      SESSION_KEY: ${SESSION_KEY}
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        PUBLIC_API_URL: ${PUBLIC_API_URL}
+        PUBLIC_TILE_SERVER_URL: ${PUBLIC_TILE_SERVER_URL}
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
