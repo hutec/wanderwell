@@ -25,13 +25,15 @@ type Server struct {
 	db           *sql.DB
 	cacheUpdater *strava.CacheUpdater
 	router       chi.Router
+	frontendURL  string
 }
 
-func NewServer(db *sql.DB, cacheUpdater *strava.CacheUpdater) *Server {
+func NewServer(db *sql.DB, cacheUpdater *strava.CacheUpdater, frontendURL string) *Server {
 	s := &Server{
 		db:           db,
 		cacheUpdater: cacheUpdater,
 		router:       chi.NewRouter(),
+		frontendURL:  frontendURL,
 	}
 	s.setupRoutes()
 	return s
@@ -75,7 +77,7 @@ func (s *Server) RequireAuth(next http.Handler) http.Handler {
 func (s *Server) setupRoutes() {
 	// CORS configuration
 	s.router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173"}, // Allow all origins
+		AllowedOrigins:   []string{s.frontendURL},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},

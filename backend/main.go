@@ -106,7 +106,7 @@ func main() {
 		gothstrava.New(cfg.StravaClientID, cfg.StravaClientSecret, cfg.RedirectURI, scope),
 	)
 
-	if err := api.NewServer(db, cacheUpdater).Start(cfg.ServerPort); err != nil {
+	if err := api.NewServer(db, cacheUpdater, cfg.FrontendURL).Start(cfg.ServerPort); err != nil {
 		slog.Error("Error starting server", "err", err)
 	}
 }
