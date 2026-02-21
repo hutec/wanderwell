@@ -1,7 +1,7 @@
 services:
   init-backend-data:
     image: alpine:3.20
-    command: sh -c "chown -R 65532:65532 /home/nonroot"
+    command: sh -c "chown -R 65532:65532 /data"
     volumes:
       - backend-data:/data
     restart: "no"
