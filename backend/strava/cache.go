@@ -36,7 +36,7 @@ func (cu *CacheUpdater) GetAllUserActivities(userID int64, maxPages int) ([]swag
 }
 
 func (cu *CacheUpdater) GetUserIDs() ([]int64, error) {
-	rows, err := cu.db.Query("SELECT id FROM user")
+	rows, err := cu.db.Query("SELECT id FROM athlete")
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (cu *CacheUpdater) UpdateActivityCache(userID int64) error {
 
 		// Check if activity already exists in the database and add it if not
 		var currentName string
-		err := cu.db.QueryRow("SELECT name FROM route WHERE id = ? and user_id = ?", activity.Id, userID).Scan(&currentName)
+		err := cu.db.QueryRow("SELECT name FROM route WHERE id = $1 and user_id = $2", activity.Id, userID).Scan(&currentName)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				// Can be a go-routine once rate limiting in concurrent calls is handled
@@ -89,7 +89,7 @@ func (cu *CacheUpdater) UpdateActivityCache(userID int64) error {
 		if currentName != activity.Name {
 			slog.Info("Activity name changed, updating", "activityID", activity.Id, "oldName", currentName, "newName", activity.Name)
 			cu.dbMutex.Lock()
-			_, err = cu.db.Exec("UPDATE route SET name = ? WHERE id = ? and user_id = ?", activity.Name, activity.Id, userID)
+			_, err = cu.db.Exec("UPDATE route SET name = $1 WHERE id = $2 and user_id = $3", activity.Name, activity.Id, userID)
 			cu.dbMutex.Unlock()
 			if err != nil {
 				slog.Error("Failed to update activity name", "error", err)
@@ -131,6 +131,7 @@ func (cu *CacheUpdater) AddDetailedActivity(activityID int64, athleteID int64) e
 		AverageSpeed: float32(detailedActivity.AverageSpeed) * 3.6, // Convert to km/h
 		Elevation:    float32(detailedActivity.TotalElevationGain),
 		Bounds:       bounds,
+		SportType:    string(*detailedActivity.SportType),
 	}
 
 	cu.dbMutex.Lock()

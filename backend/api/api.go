@@ -131,7 +131,7 @@ func (s *Server) getCurrentUser(w http.ResponseWriter, r *http.Request) {
 	// Fetch user from database
 	var user models.User
 	err := s.db.QueryRow(
-		"SELECT id, firstname, lastname FROM user WHERE id = ?",
+		"SELECT id, firstname, lastname FROM athlete WHERE id = $1",
 		userID,
 	).Scan(&user.ID, &user.Firstname, &user.Lastname)
 
@@ -228,8 +228,8 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request) {
 
 	// Insert or update user in database
 	_, err = s.db.Exec(`
-		INSERT INTO user (id, firstname, lastname, access_token, refresh_token, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO athlete (id, firstname, lastname, access_token, refresh_token, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT(id) DO UPDATE SET
 			firstname = excluded.firstname,
 			lastname = excluded.lastname,
@@ -348,7 +348,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 
 func listUsers(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.Query("SELECT id, firstname, lastname, expires_at, refresh_token, access_token FROM user")
+		rows, err := db.Query("SELECT id, firstname, lastname, expires_at, refresh_token, access_token FROM athlete")
 		if err != nil {
 			http.Error(w, "Failed to query users", http.StatusInternalServerError)
 			return
@@ -375,7 +375,7 @@ func listUsers(db *sql.DB) http.HandlerFunc {
 
 func listRoutesByUser(db *sql.DB, userID int64, excludeRoute bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.Query("SELECT id, user_id, start_date, name, elapsed_time, moving_time, distance, average_speed, route, elevation, bounds FROM route WHERE user_id = ? ORDER BY start_date DESC", userID)
+		rows, err := db.Query("SELECT id, user_id, start_date, name, elapsed_time, moving_time, distance, average_speed, route, elevation, bounds, sport_type  FROM route WHERE user_id = $1 ORDER BY start_date DESC", userID)
 		if err != nil {
 			http.Error(w, "Failed to query routes", http.StatusInternalServerError)
 			return
@@ -385,7 +385,7 @@ func listRoutesByUser(db *sql.DB, userID int64, excludeRoute bool) http.HandlerF
 		var routes []models.Route
 		for rows.Next() {
 			var route models.Route
-			if err := rows.Scan(&route.ID, &route.UserID, &route.StartDate, &route.Name, &route.ElapsedTime, &route.MovingTime, &route.Distance, &route.AverageSpeed, &route.Route, &route.Elevation, &route.Bounds); err != nil {
+			if err := rows.Scan(&route.ID, &route.UserID, &route.StartDate, &route.Name, &route.ElapsedTime, &route.MovingTime, &route.Distance, &route.AverageSpeed, &route.Route, &route.Elevation, &route.Bounds, &route.SportType); err != nil {
 				http.Error(w, fmt.Sprintf("Failed to scan route: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -426,7 +426,7 @@ func serveGeojsonForUser(db *sql.DB, userID int64) http.HandlerFunc {
 		}
 
 		// Query routes with all necessary fields, ordered by start_date descending
-		rows, err := db.Query("SELECT id, start_date, route FROM route WHERE user_id = ? ORDER BY start_date DESC", userID)
+		rows, err := db.Query("SELECT id, start_date, route FROM route WHERE user_id = $1 ORDER BY start_date DESC", userID)
 		if err != nil {
 			http.Error(w, "Failed to query routes", http.StatusInternalServerError)
 			return
