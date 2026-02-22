@@ -39,5 +39,18 @@ services:
       - backend
     restart: unless-stopped
 
+  postgis:
+    image: postgis/postgis:18-3.6
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: wanderwell
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgis-data:/var/lib/postgresql
+
 volumes:
   backend-data:
+  postgis-data:
