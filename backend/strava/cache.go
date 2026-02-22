@@ -119,6 +119,7 @@ func (cu *CacheUpdater) AddDetailedActivity(activityID int64, athleteID int64) e
 		return nil
 	}
 
+	routePolyline := detailedActivity.Map_.Polyline
 	route := &models.Route{
 		ID:           detailedActivity.Id,
 		UserID:       detailedActivity.Athlete.Id,
@@ -127,11 +128,10 @@ func (cu *CacheUpdater) AddDetailedActivity(activityID int64, athleteID int64) e
 		ElapsedTime:  detailedActivity.ElapsedTime,
 		MovingTime:   detailedActivity.MovingTime,
 		Distance:     float32(detailedActivity.Distance) / 1000.0, // Convert to kilometers
-		Route:        detailedActivity.Map_.Polyline,
+		Route:        &routePolyline,
 		AverageSpeed: float32(detailedActivity.AverageSpeed) * 3.6, // Convert to km/h
 		Elevation:    float32(detailedActivity.TotalElevationGain),
 		Bounds:       bounds,
-		SportType:    string(*detailedActivity.SportType),
 	}
 
 	cu.dbMutex.Lock()

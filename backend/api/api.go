@@ -5,12 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"strconv"
-	"time"
 	"wanderwell/backend/models"
 	"wanderwell/backend/strava"
 
@@ -18,7 +15,6 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httplog/v3"
 	"github.com/markbates/goth/gothic"
-	"github.com/twpayne/go-polyline"
 )
 
 type Server struct {
@@ -92,9 +88,7 @@ func (s *Server) setupRoutes() {
 	s.router.Group(func(r chi.Router) {
 		r.Use(s.RequireAuth)
 		r.Get("/me", s.getCurrentUser)
-		r.Get("/routes", s.listRoutesWithRouteData)
 		r.Get("/route_details", s.listRoutesWithoutRouteData)
-		r.Get("/geojson", s.serveGeojsonForUser)
 		r.Get("/update", s.updateCacheForUser)
 	})
 
@@ -153,20 +147,12 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 	listUsers(s.db)(w, r)
 }
 
-func (s *Server) listRoutesWithRouteData(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value(userIDKey).(int64)
-	if !ok {
-		http.Error(w, "user_id not found in context", http.StatusBadRequest)
-	}
-	listRoutesByUser(s.db, userID, false)(w, r) // excludeRoute = false
-}
-
 func (s *Server) listRoutesWithoutRouteData(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value(userIDKey).(int64)
 	if !ok {
 		http.Error(w, "user_id not found in context", http.StatusBadRequest)
 	}
-	listRoutesByUser(s.db, userID, true)(w, r) // excludeRoute = true
+	listRoutesByUser(s.db, userID)(w, r) // excludeRoute = true
 }
 
 func (s *Server) updateCacheForUser(w http.ResponseWriter, r *http.Request) {
@@ -189,14 +175,6 @@ func (s *Server) updateCacheForUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	w.WriteHeader(http.StatusOK)
-}
-
-func (s *Server) serveGeojsonForUser(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value(userIDKey).(int64)
-	if !ok {
-		http.Error(w, "user_id not found in context", http.StatusBadRequest)
-	}
-	serveGeojsonForUser(s.db, userID)(w, r)
 }
 
 func (s *Server) initiateAuthentication(w http.ResponseWriter, r *http.Request) {
@@ -373,9 +351,9 @@ func listUsers(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-func listRoutesByUser(db *sql.DB, userID int64, excludeRoute bool) http.HandlerFunc {
+func listRoutesByUser(db *sql.DB, userID int64) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.Query("SELECT id, user_id, start_date, name, elapsed_time, moving_time, distance, average_speed, route, elevation, bounds, sport_type  FROM route WHERE user_id = $1 ORDER BY start_date DESC", userID)
+		rows, err := db.Query("SELECT id, user_id, start_date, name, elapsed_time, moving_time, distance, average_speed, elevation, bounds FROM route WHERE user_id = $1 ORDER BY start_date DESC", userID)
 		if err != nil {
 			http.Error(w, "Failed to query routes", http.StatusInternalServerError)
 			return
@@ -385,13 +363,9 @@ func listRoutesByUser(db *sql.DB, userID int64, excludeRoute bool) http.HandlerF
 		var routes []models.Route
 		for rows.Next() {
 			var route models.Route
-			if err := rows.Scan(&route.ID, &route.UserID, &route.StartDate, &route.Name, &route.ElapsedTime, &route.MovingTime, &route.Distance, &route.AverageSpeed, &route.Route, &route.Elevation, &route.Bounds, &route.SportType); err != nil {
+			if err := rows.Scan(&route.ID, &route.UserID, &route.StartDate, &route.Name, &route.ElapsedTime, &route.MovingTime, &route.Distance, &route.AverageSpeed, &route.Elevation, &route.Bounds); err != nil {
 				http.Error(w, fmt.Sprintf("Failed to scan route: %v", err), http.StatusInternalServerError)
 				return
-			}
-
-			if excludeRoute {
-				route.Route = ""
 			}
 
 			routes = append(routes, route)
@@ -402,121 +376,5 @@ func listRoutesByUser(db *sql.DB, userID int64, excludeRoute bool) http.HandlerF
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(routes)
-	}
-}
-
-func serveGeojsonForUser(db *sql.DB, userID int64) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Create a temporary file to write the GeoJSON data
-		tmpFile, err := os.CreateTemp("", fmt.Sprintf("geojson_user_%d_*.json", userID))
-		if err != nil {
-			http.Error(w, "Failed to create temporary file", http.StatusInternalServerError)
-			return
-		}
-		defer os.Remove(tmpFile.Name()) // Clean up the temp file
-		defer tmpFile.Close()
-
-		// Start writing the GeoJSON structure to the file
-		encoder := json.NewEncoder(tmpFile)
-
-		// Write the opening of the FeatureCollection
-		if _, err := tmpFile.WriteString(`{"type":"FeatureCollection","features":[`); err != nil {
-			http.Error(w, "Failed to write to temporary file", http.StatusInternalServerError)
-			return
-		}
-
-		// Query routes with all necessary fields, ordered by start_date descending
-		rows, err := db.Query("SELECT id, start_date, route FROM route WHERE user_id = $1 ORDER BY start_date DESC", userID)
-		if err != nil {
-			http.Error(w, "Failed to query routes", http.StatusInternalServerError)
-			return
-		}
-		defer rows.Close()
-
-		firstFeature := true
-		for rows.Next() {
-			var routeID string
-			var startDate time.Time
-			var routePolyline string
-
-			if err := rows.Scan(&routeID, &startDate, &routePolyline); err != nil {
-				http.Error(w, "Failed to scan route", http.StatusInternalServerError)
-				return
-			}
-
-			// Decode the polyline to get coordinates
-			coords, _, err := polyline.DecodeCoords([]byte(routePolyline))
-			if err != nil {
-				slog.Error("Failed to decode polyline", "routeID", routeID, "err", err)
-				continue // Skip this route but continue with others
-			}
-
-			// Convert coordinates to GeoJSON format [lng, lat] and swap lat/lng like Python version
-			var geoJSONCoords [][]float32
-			for _, coord := range coords {
-				// Python version does: [x[1], x[0]] which swaps lat/lng to lng/lat
-				geoJSONCoords = append(geoJSONCoords, []float32{float32(coord[1]), float32(coord[0])})
-			}
-
-			// Create GeoJSON feature similar to Python version
-			feature := map[string]interface{}{
-				"type": "Feature",
-				"geometry": map[string]interface{}{
-					"type":        "LineString",
-					"coordinates": geoJSONCoords,
-				},
-				"properties": map[string]interface{}{
-					"id":         routeID,
-					"start_date": startDate.Unix(), // Convert to seconds (Python divides ms by 1000)
-				},
-			}
-
-			// Add comma separator for subsequent features
-			if !firstFeature {
-				if _, err := tmpFile.WriteString(","); err != nil {
-					http.Error(w, "Failed to write to temporary file", http.StatusInternalServerError)
-					return
-				}
-			}
-			firstFeature = false
-
-			// Write the feature to the file
-			if err := encoder.Encode(feature); err != nil {
-				http.Error(w, "Failed to encode feature to temporary file", http.StatusInternalServerError)
-				return
-			}
-		}
-		if err := rows.Err(); err != nil {
-			http.Error(w, "Error iterating over routes", http.StatusInternalServerError)
-			return
-		}
-
-		// Close the FeatureCollection
-		if _, err := tmpFile.WriteString("]}"); err != nil {
-			http.Error(w, "Failed to write to temporary file", http.StatusInternalServerError)
-			return
-		}
-
-		// Close the file to ensure all data is flushed
-		if err := tmpFile.Close(); err != nil {
-			http.Error(w, "Failed to close temporary file", http.StatusInternalServerError)
-			return
-		}
-
-		// Reopen the file for reading
-		file, err := os.Open(tmpFile.Name())
-		if err != nil {
-			http.Error(w, "Failed to open temporary file for reading", http.StatusInternalServerError)
-			return
-		}
-		defer file.Close()
-
-		// Set headers and serve the file content
-		w.Header().Set("Content-Type", "application/json")
-
-		// Copy the file content to the response writer
-		if _, err := io.Copy(w, file); err != nil {
-			slog.Error("Failed to serve GeoJSON file", "err", err)
-		}
 	}
 }

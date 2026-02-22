@@ -52,7 +52,6 @@ func ensureSchema(db *sql.DB) error {
 			moving_time INTEGER,
 			distance FLOAT,
 			average_speed FLOAT,
-			route VARCHAR,
 			elevation FLOAT,
 			bounds TEXT,
 			sport_type VARCHAR,
