@@ -18,10 +18,9 @@ type Route struct {
 	MovingTime   int32     `json:"moving_time"`
 	Distance     float32   `json:"distance"`
 	AverageSpeed float32   `json:"average_speed"`
-	Route        string    `json:"route"` // Raw polyline string
+	Route        *string   `json:"route,omitempty"` // Raw polyline string
 	Elevation    float32   `json:"elevation"`
 	Bounds       string    `json:"bounds"`
-	SportType    string    `json:sport_type`
 }
 
 func (r *Route) Exists(db *sql.DB) (bool, error) {
@@ -34,34 +33,41 @@ func (r *Route) Exists(db *sql.DB) (bool, error) {
 }
 
 func (r *Route) Add(db *sql.DB) error {
-
-	coords, _, decodeErr := polyline.DecodeCoords([]byte(r.Route))
-	if decodeErr != nil {
-		slog.Error("Error decoding polyline for route %d: %v", r.ID, decodeErr)
+	var wkt *string
+	if r.Route != nil && *r.Route != "" {
+		coords, _, decodeErr := polyline.DecodeCoords([]byte(*r.Route))
+		if decodeErr != nil {
+			slog.Error("Error decoding polyline for route", "route_id", r.ID, "err", decodeErr)
+		} else {
+			wktValue := CoordsToWKT(coords)
+			wkt = &wktValue
+		}
 	}
-	// Convert to WKT LineString format
-	wkt := coordsToWKT(coords)
 
-	_, err := db.Exec("INSERT INTO route (id, user_id, start_date, name, elapsed_time, moving_time, distance, average_speed, route, elevation, bounds, sport_type, geom) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, ST_GeomFromText($13, 4326))",
-		r.ID, r.UserID, r.StartDate, r.Name, r.ElapsedTime, r.MovingTime, r.Distance, r.AverageSpeed, r.Route, r.Elevation, r.Bounds, r.SportType, wkt)
+	_, err := db.Exec("INSERT INTO route (id, user_id, start_date, name, elapsed_time, moving_time, distance, average_speed, elevation, bounds, geom) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, ST_GeomFromText($11, 4326))",
+		r.ID, r.UserID, r.StartDate, r.Name, r.ElapsedTime, r.MovingTime, r.Distance, r.AverageSpeed, r.Elevation, r.Bounds, wkt)
 	return err
 }
 
 func (r *Route) Update(db *sql.DB) error {
-	coords, _, decodeErr := polyline.DecodeCoords([]byte(r.Route))
-	if decodeErr != nil {
-		slog.Error("Error decoding polyline for route %d: %v", r.ID, decodeErr)
+	var wkt *string
+	if r.Route != nil && *r.Route != "" {
+		coords, _, decodeErr := polyline.DecodeCoords([]byte(*r.Route))
+		if decodeErr != nil {
+			slog.Error("Error decoding polyline for route", "route_id", r.ID, "err", decodeErr)
+		} else {
+			wktValue := CoordsToWKT(coords)
+			wkt = &wktValue
+		}
 	}
-	// Convert to WKT LineString format
-	wkt := coordsToWKT(coords)
 
-	_, err := db.Exec("UPDATE route SET user_id = $1, start_date = $2, name = $3, elapsed_time = $4, moving_time = $5, distance = $6, average_speed = $7, route = $8, elevation = $9, bounds = $10, sport_type = $11, geom = ST_GeomFromText($13, 4326) WHERE id = $12",
-		r.UserID, r.StartDate, r.Name, r.ElapsedTime, r.MovingTime, r.Distance, r.AverageSpeed, r.Route, r.Elevation, r.Bounds, r.SportType, r.ID, wkt)
+	_, err := db.Exec("UPDATE route SET user_id = $1, start_date = $2, name = $3, elapsed_time = $4, moving_time = $5, distance = $6, average_speed = $7, elevation = $8, bounds = $9, geom = ST_GeomFromText($11, 4326) WHERE id = $10",
+		r.UserID, r.StartDate, r.Name, r.ElapsedTime, r.MovingTime, r.Distance, r.AverageSpeed, r.Elevation, r.Bounds, r.ID, wkt)
 	return err
 }
 
-// coordsToWKT converts a slice of coordinates to a WKT (Well-Known Text) representation of a LINESTRING
-func coordsToWKT(coords [][]float64) string {
+// CoordsToWKT converts a slice of coordinates to a WKT (Well-Known Text) representation of a LINESTRING
+func CoordsToWKT(coords [][]float64) string {
 	if len(coords) == 0 {
 		return "LINESTRING EMPTY"
 	}

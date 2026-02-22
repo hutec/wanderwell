@@ -59,7 +59,7 @@ func (api *StravaAPI) GetAthleteAccessToken(athleteID int64) (string, error) {
 
 		// Update user in database
 		api.dbMutex.Lock()
-		_, err = api.db.Exec("UPDATE user SET access_token = $1, expires_at = $2 WHERE id = $3", user.AccessToken, user.ExpiresAt, user.ID)
+		_, err = api.db.Exec("UPDATE athlete SET access_token = $1, expires_at = $2 WHERE id = $3", user.AccessToken, user.ExpiresAt, user.ID)
 		api.dbMutex.Unlock()
 		if err != nil {
 			slog.Error("Failed to update user", "error", err)
