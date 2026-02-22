@@ -41,7 +41,7 @@ func NewStravaAPI(db *sql.DB, cfg *config.Config) *StravaAPI {
 // If the token is expired it is automatically refreshed.
 func (api *StravaAPI) GetAthleteAccessToken(athleteID int64) (string, error) {
 	var user models.User
-	err := api.db.QueryRow("SELECT id, expires_at, refresh_token, access_token FROM user WHERE id = ?", athleteID).
+	err := api.db.QueryRow("SELECT id, expires_at, refresh_token, access_token FROM athlete WHERE id = $1", athleteID).
 		Scan(&user.ID, &user.ExpiresAt, &user.RefreshToken, &user.AccessToken)
 	if err != nil {
 		return "", err
@@ -59,7 +59,7 @@ func (api *StravaAPI) GetAthleteAccessToken(athleteID int64) (string, error) {
 
 		// Update user in database
 		api.dbMutex.Lock()
-		_, err = api.db.Exec("UPDATE user SET access_token = ?, expires_at = ? WHERE id = ?", user.AccessToken, user.ExpiresAt, user.ID)
+		_, err = api.db.Exec("UPDATE user SET access_token = $1, expires_at = $2 WHERE id = $3", user.AccessToken, user.ExpiresAt, user.ID)
 		api.dbMutex.Unlock()
 		if err != nil {
 			slog.Error("Failed to update user", "error", err)

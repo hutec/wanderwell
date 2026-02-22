@@ -14,12 +14,13 @@ import (
 	gothstrava "github.com/markbates/goth/providers/strava"
 
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
 )
 
 func initDB(databasePath string) (*sql.DB, error) {
 	var err error
-	db, err := sql.Open("sqlite", databasePath)
+	db, err := sql.Open("postgres", databasePath)
 	if err != nil {
 		slog.Error("Failed to open database", "err", err)
 	}
@@ -34,8 +35,8 @@ func initDB(databasePath string) (*sql.DB, error) {
 
 func ensureSchema(db *sql.DB) error {
 	schema := `
-		CREATE TABLE IF NOT EXISTS user (
-			id INTEGER PRIMARY KEY,
+		CREATE TABLE IF NOT EXISTS athlete (
+			id BIGINT PRIMARY KEY,
 			firstname TEXT,
 			lastname TEXT,
 			expires_at INTEGER,
@@ -43,9 +44,9 @@ func ensureSchema(db *sql.DB) error {
 			access_token TEXT
 		);
 		CREATE TABLE IF NOT EXISTS route (
-			id INTEGER PRIMARY KEY,
-			user_id INTEGER,
-			start_date DATETIME,
+			id BIGINT PRIMARY KEY,
+			user_id BIGINT,
+			start_date TIMESTAMP,
 			name VARCHAR,
 			elapsed_time INTEGER,
 			moving_time INTEGER,
@@ -54,8 +55,13 @@ func ensureSchema(db *sql.DB) error {
 			route VARCHAR,
 			elevation FLOAT,
 			bounds TEXT,
-			FOREIGN KEY(user_id) REFERENCES user(id)
+			sport_type VARCHAR,
+			geom GEOMETRY(LineString, 4326),
+			FOREIGN KEY(user_id) REFERENCES athlete(id)
 		);
+
+		-- Create spatial index
+        CREATE INDEX IF NOT EXISTS route_geom_idx ON route USING GIST (geom);
 		`
 
 	_, err := db.Exec(schema)
