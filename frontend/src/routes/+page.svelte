@@ -33,7 +33,9 @@
 		const style = JSON.parse(JSON.stringify(mapStyle));
 
 		if (authState.isAuthenticated && style.sources && style.sources.AllRoutes) {
-			style.sources.AllRoutes.url = tileServerEndpoint(`/data/${authState.currentUser?.id}.json`);
+			style.sources.AllRoutes.url = tileServerEndpoint(
+				`/user_routes?user_id=${authState.currentUser?.id}`
+			);
 		}
 
 		if (style.layers) {
