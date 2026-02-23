@@ -61,6 +61,36 @@ func ensureSchema(db *sql.DB) error {
 
 		-- Create spatial index
         CREATE INDEX IF NOT EXISTS route_geom_idx ON route USING GIST (geom);
+
+        -- Create MVT function for user routes
+        CREATE OR REPLACE FUNCTION user_routes(z int, x int, y int, query_params json)
+		RETURNS bytea AS $$
+		DECLARE
+		  mvt bytea;
+		  uid bigint;
+		BEGIN
+		  uid := (query_params->>'user_id')::bigint;
+
+		  SELECT INTO mvt ST_AsMVT(tile, 'user_routes', 4096, 'geom')
+		  FROM (
+		    SELECT
+		      id,
+		      name,
+		      sport_type,
+		      distance,
+		      start_date,
+		      ST_AsMVTGeom(
+		        ST_Transform(geom, 3857),
+		        ST_TileEnvelope(z, x, y),
+		        4096, 64, true
+		      ) AS geom
+		    FROM route
+		    WHERE user_id = uid AND geom && ST_Transform(ST_TileEnvelope(z, x, y), 4326)
+		  ) tile;
+
+		  RETURN mvt;
+		END;
+		$$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
 		`
 
 	_, err := db.Exec(schema)

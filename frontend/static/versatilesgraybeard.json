@@ -5109,7 +5109,7 @@
       "id": "Route",
       "type": "line",
       "source": "AllRoutes",
-      "source-layer": "strava",
+      "source-layer": "user_routes",
       "layout": {"line-cap": "butt", "visibility": "visible"},
       "paint": {
         "line-opacity": 1,
