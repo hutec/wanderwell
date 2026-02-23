@@ -48,5 +48,16 @@ services:
       timeout: 3s
       retries: 10
 
+  tileserver:
+    image: maplibre/martin:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@postgis:5432/wanderwell?sslmode=disable
+    depends_on:
+      postgis:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgis-data:
