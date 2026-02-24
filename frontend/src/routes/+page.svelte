@@ -41,10 +41,7 @@
 		if (style.layers) {
 			const routeLayer = style.layers.find((layer) => layer.id === 'Route');
 			if (routeLayer && routesState.routes.length > 0) {
-				routeLayer.filter = [
-					'all',
-					['in', 'id', ...routesState.routes.map((route) => String(route.id))]
-				];
+				routeLayer.filter = ['all', ['in', 'id', ...routesState.routes.map((route) => route.id)]];
 			} else if (routeLayer) {
 				delete routeLayer.filter;
 			}
