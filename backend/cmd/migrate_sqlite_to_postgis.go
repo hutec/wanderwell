@@ -9,7 +9,7 @@ import (
 
 	"wanderwell/backend/models"
 
-	_ "github.com/lib/pq" // PostgreSQL driver
+	_ "github.com/jackc/pgx/v5/stdlib" // PostgreSQL driver
 	"github.com/twpayne/go-polyline"
 	_ "modernc.org/sqlite" // SQLite driver
 )
@@ -64,7 +64,7 @@ func main() {
 
 func copyToPostGIS(sqliteDB *sql.DB, postgisConnStr string) error {
 	// Connect to PostGIS
-	pgDB, err := sql.Open("postgres", postgisConnStr)
+	pgDB, err := sql.Open("pgx", postgisConnStr)
 	if err != nil {
 		return fmt.Errorf("failed to connect to PostGIS: %w", err)
 	}
