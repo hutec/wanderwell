@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -14,17 +13,19 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httplog/v3"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/markbates/goth/gothic"
 )
 
 type Server struct {
-	db           *sql.DB
+	db           *pgxpool.Pool
 	cacheUpdater *strava.CacheUpdater
 	router       chi.Router
 	frontendURL  string
 }
 
-func NewServer(db *sql.DB, cacheUpdater *strava.CacheUpdater, frontendURL string) *Server {
+func NewServer(db *pgxpool.Pool, cacheUpdater *strava.CacheUpdater, frontendURL string) *Server {
 	s := &Server{
 		db:           db,
 		cacheUpdater: cacheUpdater,
@@ -125,12 +126,13 @@ func (s *Server) getCurrentUser(w http.ResponseWriter, r *http.Request) {
 	// Fetch user from database
 	var user models.User
 	err := s.db.QueryRow(
+		r.Context(),
 		"SELECT id, firstname, lastname FROM athlete WHERE id = $1",
 		userID,
 	).Scan(&user.ID, &user.Firstname, &user.Lastname)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == pgx.ErrNoRows {
 			http.Error(w, "User not found", http.StatusNotFound)
 			return
 		}
@@ -205,7 +207,7 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Insert or update user in database
-	_, err = s.db.Exec(`
+	_, err = s.db.Exec(r.Context(), `
 		INSERT INTO athlete (id, firstname, lastname, access_token, refresh_token, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT(id) DO UPDATE SET
@@ -324,9 +326,9 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func listUsers(db *sql.DB) http.HandlerFunc {
+func listUsers(db *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.Query("SELECT id, firstname, lastname, expires_at, refresh_token, access_token FROM athlete")
+		rows, err := db.Query(r.Context(), "SELECT id, firstname, lastname, expires_at, refresh_token, access_token FROM athlete")
 		if err != nil {
 			http.Error(w, "Failed to query users", http.StatusInternalServerError)
 			return
@@ -351,9 +353,9 @@ func listUsers(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-func listRoutesByUser(db *sql.DB, userID int64) http.HandlerFunc {
+func listRoutesByUser(db *pgxpool.Pool, userID int64) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.Query("SELECT id, user_id, start_date, name, elapsed_time, moving_time, distance, average_speed, elevation, bounds FROM route WHERE user_id = $1 ORDER BY start_date DESC", userID)
+		rows, err := db.Query(r.Context(), "SELECT id, user_id, start_date, name, elapsed_time, moving_time, distance, average_speed, elevation, bounds FROM route WHERE user_id = $1 ORDER BY start_date DESC", userID)
 		if err != nil {
 			http.Error(w, "Failed to query routes", http.StatusInternalServerError)
 			return

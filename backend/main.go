@@ -1,7 +1,7 @@
 package main
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -10,30 +10,28 @@ import (
 	"wanderwell/backend/config"
 	"wanderwell/backend/strava"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/markbates/goth"
 	gothstrava "github.com/markbates/goth/providers/strava"
 
 	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
-	_ "modernc.org/sqlite"
 )
 
-func initDB(databasePath string) (*sql.DB, error) {
-	var err error
-	db, err := sql.Open("postgres", databasePath)
+func initDB(databasePath string) (*pgxpool.Pool, error) {
+	pool, err := pgxpool.New(context.Background(), databasePath)
 	if err != nil {
-		slog.Error("Failed to open database", "err", err)
+		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
 	// Test the connection
-	if err := db.Ping(); err != nil {
+	if err := pool.Ping(context.Background()); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	return db, nil
+	return pool, nil
 }
 
-func ensureSchema(db *sql.DB) error {
+func ensureSchema(pool *pgxpool.Pool) error {
 	schema := `
 		CREATE TABLE IF NOT EXISTS athlete (
 			id BIGINT PRIMARY KEY,
@@ -93,7 +91,7 @@ func ensureSchema(db *sql.DB) error {
 		$$ LANGUAGE plpgsql STABLE PARALLEL SAFE;
 		`
 
-	_, err := db.Exec(schema)
+	_, err := pool.Exec(context.Background(), schema)
 	if err != nil {
 		return fmt.Errorf("failed to create schema: %w", err)
 	}

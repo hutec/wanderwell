@@ -2,7 +2,6 @@ package strava
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -13,18 +12,19 @@ import (
 	"wanderwell/backend/models"
 
 	"github.com/antihax/optional"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // API wrapper that handles authentication and requests to Strava's API.
 type StravaAPI struct {
-	db        *sql.DB
+	db        *pgxpool.Pool
 	dbMutex   sync.Mutex
 	cfg       *config.Config
 	apiClient *swagger.APIClient
 	RateLimit *RateLimit
 }
 
-func NewStravaAPI(db *sql.DB, cfg *config.Config) *StravaAPI {
+func NewStravaAPI(db *pgxpool.Pool, cfg *config.Config) *StravaAPI {
 	apiConfig := swagger.NewConfiguration()
 	apiClient := swagger.NewAPIClient(apiConfig)
 	rateLimit := NewRateLimit()
@@ -41,7 +41,7 @@ func NewStravaAPI(db *sql.DB, cfg *config.Config) *StravaAPI {
 // If the token is expired it is automatically refreshed.
 func (api *StravaAPI) GetAthleteAccessToken(athleteID int64) (string, error) {
 	var user models.User
-	err := api.db.QueryRow("SELECT id, expires_at, refresh_token, access_token FROM athlete WHERE id = $1", athleteID).
+	err := api.db.QueryRow(context.Background(), "SELECT id, expires_at, refresh_token, access_token FROM athlete WHERE id = $1", athleteID).
 		Scan(&user.ID, &user.ExpiresAt, &user.RefreshToken, &user.AccessToken)
 	if err != nil {
 		return "", err
@@ -59,7 +59,7 @@ func (api *StravaAPI) GetAthleteAccessToken(athleteID int64) (string, error) {
 
 		// Update user in database
 		api.dbMutex.Lock()
-		_, err = api.db.Exec("UPDATE athlete SET access_token = $1, expires_at = $2 WHERE id = $3", user.AccessToken, user.ExpiresAt, user.ID)
+		_, err = api.db.Exec(context.Background(), "UPDATE athlete SET access_token = $1, expires_at = $2 WHERE id = $3", user.AccessToken, user.ExpiresAt, user.ID)
 		api.dbMutex.Unlock()
 		if err != nil {
 			slog.Error("Failed to update user", "error", err)
