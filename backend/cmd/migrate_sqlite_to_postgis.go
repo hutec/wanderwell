@@ -164,7 +164,7 @@ func copyToPostGIS(sqliteDB *sql.DB, postgisConnStr string) error {
 		// Convert to WKT LineString format
 		wkt := models.CoordsToWKT(coords)
 
-		err = queries.InsertRoute(ctx, db.InsertRouteParams{
+		err = queries.UpsertRoute(ctx, db.UpsertRouteParams{
 			ID:             r.ID,
 			UserID:         r.UserID,
 			StartDate:      pgtype.Timestamptz{Time: r.StartDate, Valid: true},

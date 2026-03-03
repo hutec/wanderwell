@@ -126,47 +126,24 @@ func (cu *CacheUpdater) AddDetailedActivity(activityID int64, athleteID int64) e
 		wkt = &wktValue
 	}
 
-	startDate := pgtype.Timestamptz{Time: detailedActivity.StartDate, Valid: true}
-
 	cu.dbMutex.Lock()
 	defer cu.dbMutex.Unlock()
 
-	exists, err := cu.queries.RouteExists(context.Background(), activityID)
-	if err != nil {
-		return err
-	}
+	err = cu.queries.UpsertRoute(context.Background(), db.UpsertRouteParams{
+		ID:             activityID,
+		UserID:         detailedActivity.Athlete.Id,
+		StartDate:      pgtype.Timestamptz{Time: detailedActivity.StartDate, Valid: true},
+		Name:           detailedActivity.Name,
+		ElapsedTime:    detailedActivity.ElapsedTime,
+		MovingTime:     detailedActivity.MovingTime,
+		Distance:       float64(detailedActivity.Distance) / 1000.0,
+		AverageSpeed:   float64(detailedActivity.AverageSpeed) * 3.6,
+		Elevation:      float64(detailedActivity.TotalElevationGain),
+		Bounds:         bounds,
+		StGeomfromtext: wkt,
+	})
+	slog.Info("Upserted activity in cache", "activityID", activityID, "userID", athleteID)
 
-	if exists {
-		err = cu.queries.UpdateRoute(context.Background(), db.UpdateRouteParams{
-			ID:             activityID,
-			UserID:         detailedActivity.Athlete.Id,
-			StartDate:      startDate,
-			Name:           detailedActivity.Name,
-			ElapsedTime:    detailedActivity.ElapsedTime,
-			MovingTime:     detailedActivity.MovingTime,
-			Distance:       float64(detailedActivity.Distance) / 1000.0,
-			AverageSpeed:   float64(detailedActivity.AverageSpeed) * 3.6,
-			Elevation:      float64(detailedActivity.TotalElevationGain),
-			Bounds:         bounds,
-			StGeomfromtext: wkt,
-		})
-		slog.Info("Updated activity in cache", "activityID", activityID, "userID", athleteID)
-	} else {
-		err = cu.queries.InsertRoute(context.Background(), db.InsertRouteParams{
-			ID:             activityID,
-			UserID:         detailedActivity.Athlete.Id,
-			StartDate:      startDate,
-			Name:           detailedActivity.Name,
-			ElapsedTime:    detailedActivity.ElapsedTime,
-			MovingTime:     detailedActivity.MovingTime,
-			Distance:       float64(detailedActivity.Distance) / 1000.0,
-			AverageSpeed:   float64(detailedActivity.AverageSpeed) * 3.6,
-			Elevation:      float64(detailedActivity.TotalElevationGain),
-			Bounds:         bounds,
-			StGeomfromtext: wkt,
-		})
-		slog.Info("Added new activity to cache", "activityID", activityID, "userID", athleteID)
-	}
 	return err
 }
 
