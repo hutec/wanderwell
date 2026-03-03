@@ -24,10 +24,6 @@ SELECT id, firstname, lastname
 FROM athlete
 WHERE id = $1;
 
--- name: ListAthletes :many
-SELECT id, firstname, lastname, expires_at, refresh_token, access_token
-FROM athlete;
-
 -- name: ListAthleteIDs :many
 SELECT id
 FROM athlete;

@@ -14,7 +14,6 @@ type Querier interface {
 	GetRouteName(ctx context.Context, arg GetRouteNameParams) (string, error)
 	InsertRoute(ctx context.Context, arg InsertRouteParams) error
 	ListAthleteIDs(ctx context.Context) ([]int64, error)
-	ListAthletes(ctx context.Context) ([]Athlete, error)
 	ListRoutesByUser(ctx context.Context, userID int64) ([]ListRoutesByUserRow, error)
 	RouteExists(ctx context.Context, id int64) (bool, error)
 	UpdateAthleteTokens(ctx context.Context, arg UpdateAthleteTokensParams) error

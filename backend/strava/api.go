@@ -9,28 +9,31 @@ import (
 	"time"
 	swagger "wanderwell/backend/client"
 	"wanderwell/backend/config"
-	"wanderwell/backend/models"
+	"wanderwell/backend/db"
 
 	"github.com/antihax/optional"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // API wrapper that handles authentication and requests to Strava's API.
 type StravaAPI struct {
 	db        *pgxpool.Pool
+	queries   *db.Queries
 	dbMutex   sync.Mutex
 	cfg       *config.Config
 	apiClient *swagger.APIClient
 	RateLimit *RateLimit
 }
 
-func NewStravaAPI(db *pgxpool.Pool, cfg *config.Config) *StravaAPI {
+func NewStravaAPI(pool *pgxpool.Pool, cfg *config.Config) *StravaAPI {
 	apiConfig := swagger.NewConfiguration()
 	apiClient := swagger.NewAPIClient(apiConfig)
 	rateLimit := NewRateLimit()
 
 	return &StravaAPI{
-		db:        db,
+		db:        pool,
+		queries:   db.New(pool),
 		cfg:       cfg,
 		apiClient: apiClient,
 		RateLimit: rateLimit,
@@ -40,33 +43,39 @@ func NewStravaAPI(db *pgxpool.Pool, cfg *config.Config) *StravaAPI {
 // GetAthleteAccessToken retrieves the access token for a given athlete.
 // If the token is expired it is automatically refreshed.
 func (api *StravaAPI) GetAthleteAccessToken(athleteID int64) (string, error) {
-	var user models.User
-	err := api.db.QueryRow(context.Background(), "SELECT id, expires_at, refresh_token, access_token FROM athlete WHERE id = $1", athleteID).
-		Scan(&user.ID, &user.ExpiresAt, &user.RefreshToken, &user.AccessToken)
+	row, err := api.queries.GetAthleteTokens(context.Background(), athleteID)
 	if err != nil {
 		return "", err
 	}
+	expiresAt := row.ExpiresAt.Int64
+	accessToken := row.AccessToken.String
+	refreshTokenStr := row.RefreshToken.String
+
 	// If token is expired or about to expire, refresh it
-	if user.ExpiresAt < time.Now().Unix() {
+	if expiresAt < time.Now().Unix() {
 		slog.Info("Refreshing token for user", "userID", athleteID)
-		tokenResp, err := refreshToken(user.RefreshToken, api.cfg.StravaClientID, api.cfg.StravaClientSecret)
+		tokenResp, err := refreshToken(refreshTokenStr, api.cfg.StravaClientID, api.cfg.StravaClientSecret)
 		if err != nil {
 			slog.Error("Failed to refresh token", "error", err)
 			return "", err
 		}
-		user.AccessToken = tokenResp.AccessToken
-		user.ExpiresAt = tokenResp.ExpiresAt
+		accessToken = tokenResp.AccessToken
+		expiresAt = tokenResp.ExpiresAt
 
 		// Update user in database
 		api.dbMutex.Lock()
-		_, err = api.db.Exec(context.Background(), "UPDATE athlete SET access_token = $1, expires_at = $2 WHERE id = $3", user.AccessToken, user.ExpiresAt, user.ID)
+		err = api.queries.UpdateAthleteTokens(context.Background(), db.UpdateAthleteTokensParams{
+			ID:          athleteID,
+			AccessToken: pgtype.Text{String: accessToken, Valid: true},
+			ExpiresAt:   pgtype.Int8{Int64: expiresAt, Valid: true},
+		})
 		api.dbMutex.Unlock()
 		if err != nil {
 			slog.Error("Failed to update user", "error", err)
 			return "", err
 		}
 	}
-	return user.AccessToken, nil
+	return accessToken, nil
 }
 
 // GetAthleteSummaryActivities fetches all summary activities for a given athlete.
