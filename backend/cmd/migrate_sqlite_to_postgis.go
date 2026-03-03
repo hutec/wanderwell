@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"flag"
 	"fmt"
 	"log"
 	"time"
 
+	"wanderwell/backend/db"
 	"wanderwell/backend/models"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // PostgreSQL driver
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/twpayne/go-polyline"
 	_ "modernc.org/sqlite" // SQLite driver
 )
@@ -27,6 +30,15 @@ type Route struct {
 	Route        string // Polyline string
 	Elevation    float32
 	Bounds       string
+}
+
+type User struct {
+	ID           int64  `json:"id"`
+	Firstname    string `json:"name"`
+	Lastname     string `json:"-"`
+	ExpiresAt    int64  `json:"-"`
+	RefreshToken string `json:"-"`
+	AccessToken  string `json:"-"`
 }
 
 func main() {
@@ -63,19 +75,16 @@ func main() {
 }
 
 func copyToPostGIS(sqliteDB *sql.DB, postgisConnStr string) error {
-	// Connect to PostGIS
-	pgDB, err := sql.Open("pgx", postgisConnStr)
+	ctx := context.Background()
+
+	// Connect to PostGIS using native pgx
+	pgConn, err := pgx.Connect(ctx, postgisConnStr)
 	if err != nil {
 		return fmt.Errorf("failed to connect to PostGIS: %w", err)
 	}
-	defer pgDB.Close()
+	defer pgConn.Close(ctx)
 
-	// Test PostGIS connection
-	if err := pgDB.Ping(); err != nil {
-		return fmt.Errorf("failed to ping PostGIS database: %w", err)
-	}
-
-	log.Println("Creating PostGIS table and indexes...")
+	queries := db.New(pgConn)
 
 	// Query all users from SQLite
 	log.Println("Querying users from SQLite...")
@@ -88,27 +97,11 @@ func copyToPostGIS(sqliteDB *sql.DB, postgisConnStr string) error {
 	}
 	defer userRows.Close()
 
-	// Prepare insert statement for athlete
-	userStmt, err := pgDB.Prepare(`
-        INSERT INTO athlete (id, firstname, lastname, expires_at, refresh_token, access_token)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (id) DO UPDATE SET
-            firstname = EXCLUDED.firstname,
-            lastname = EXCLUDED.lastname,
-            expires_at = EXCLUDED.expires_at,
-            refresh_token = EXCLUDED.refresh_token,
-            access_token = EXCLUDED.access_token
-    `)
-	if err != nil {
-		return fmt.Errorf("failed to prepare athlete insert: %w", err)
-	}
-	defer userStmt.Close()
-
 	userCount := 0
 	userSkipped := 0
 	log.Println("Copying users...")
 	for userRows.Next() {
-		var u models.User
+		var u User
 		err := userRows.Scan(&u.ID, &u.Firstname, &u.Lastname, &u.ExpiresAt, &u.RefreshToken, &u.AccessToken)
 		if err != nil {
 			log.Printf("Error scanning user: %v", err)
@@ -116,7 +109,14 @@ func copyToPostGIS(sqliteDB *sql.DB, postgisConnStr string) error {
 			continue
 		}
 
-		_, err = userStmt.Exec(u.ID, u.Firstname, u.Lastname, u.ExpiresAt, u.RefreshToken, u.AccessToken)
+		err = queries.UpsertAthlete(ctx, db.UpsertAthleteParams{
+			ID:           u.ID,
+			Firstname:    pgtype.Text{String: u.Firstname, Valid: true},
+			Lastname:     pgtype.Text{String: u.Lastname, Valid: true},
+			AccessToken:  pgtype.Text{String: u.AccessToken, Valid: true},
+			RefreshToken: pgtype.Text{String: u.RefreshToken, Valid: true},
+			ExpiresAt:    pgtype.Int8{Int64: u.ExpiresAt, Valid: true},
+		})
 		if err != nil {
 			log.Printf("Error inserting user %d: %v", u.ID, err)
 			userSkipped++
@@ -138,29 +138,6 @@ func copyToPostGIS(sqliteDB *sql.DB, postgisConnStr string) error {
 		return fmt.Errorf("failed to query routes: %w", err)
 	}
 	defer rows.Close()
-
-	// Prepare insert statement
-	stmt, err := pgDB.Prepare(`
-        INSERT INTO route (id, user_id, start_date, name, elapsed_time, moving_time,
-                           distance, average_speed, elevation, bounds, geom)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                ST_GeomFromText($11, 4326))
-        ON CONFLICT (id) DO UPDATE SET
-            user_id = EXCLUDED.user_id,
-            start_date = EXCLUDED.start_date,
-            name = EXCLUDED.name,
-            elapsed_time = EXCLUDED.elapsed_time,
-            moving_time = EXCLUDED.moving_time,
-            distance = EXCLUDED.distance,
-            average_speed = EXCLUDED.average_speed,
-            elevation = EXCLUDED.elevation,
-            bounds = EXCLUDED.bounds,
-            geom = EXCLUDED.geom
-    `)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer stmt.Close()
 
 	count := 0
 	skipped := 0
@@ -187,10 +164,19 @@ func copyToPostGIS(sqliteDB *sql.DB, postgisConnStr string) error {
 		// Convert to WKT LineString format
 		wkt := models.CoordsToWKT(coords)
 
-		// Insert into PostGIS
-		_, err = stmt.Exec(r.ID, r.UserID, r.StartDate, r.Name, r.ElapsedTime,
-			r.MovingTime, r.Distance, r.AverageSpeed, r.Elevation,
-			r.Bounds, wkt)
+		err = queries.InsertRoute(ctx, db.InsertRouteParams{
+			ID:             r.ID,
+			UserID:         r.UserID,
+			StartDate:      pgtype.Timestamptz{Time: r.StartDate, Valid: true},
+			Name:           r.Name,
+			ElapsedTime:    r.ElapsedTime,
+			MovingTime:     r.MovingTime,
+			Distance:       float64(r.Distance),
+			AverageSpeed:   float64(r.AverageSpeed),
+			Elevation:      float64(r.Elevation),
+			Bounds:         r.Bounds,
+			StGeomfromtext: wkt,
+		})
 		if err != nil {
 			log.Printf("Error inserting route %d: %v", r.ID, err)
 			skipped++
