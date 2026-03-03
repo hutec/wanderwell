@@ -18,7 +18,6 @@ import (
 
 // API wrapper that handles authentication and requests to Strava's API.
 type StravaAPI struct {
-	db        *pgxpool.Pool
 	queries   *db.Queries
 	dbMutex   sync.Mutex
 	cfg       *config.Config
@@ -32,7 +31,6 @@ func NewStravaAPI(pool *pgxpool.Pool, cfg *config.Config) *StravaAPI {
 	rateLimit := NewRateLimit()
 
 	return &StravaAPI{
-		db:        pool,
 		queries:   db.New(pool),
 		cfg:       cfg,
 		apiClient: apiClient,
