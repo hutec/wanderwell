@@ -7,27 +7,27 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"wanderwell/backend/models"
+	"wanderwell/backend/db"
 	"wanderwell/backend/strava"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httplog/v3"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/markbates/goth/gothic"
 )
 
 type Server struct {
-	db           *pgxpool.Pool
+	queries      *db.Queries
 	cacheUpdater *strava.CacheUpdater
 	router       chi.Router
 	frontendURL  string
 }
 
-func NewServer(db *pgxpool.Pool, cacheUpdater *strava.CacheUpdater, frontendURL string) *Server {
+func NewServer(pool *pgxpool.Pool, cacheUpdater *strava.CacheUpdater, frontendURL string) *Server {
 	s := &Server{
-		db:           db,
+		queries:      db.New(pool),
 		cacheUpdater: cacheUpdater,
 		router:       chi.NewRouter(),
 		frontendURL:  frontendURL,
@@ -83,7 +83,6 @@ func (s *Server) setupRoutes() {
 	}))
 
 	s.router.Use(httplog.RequestLogger(slog.Default(), nil))
-	s.router.Get("/users", s.listUsers)
 
 	// Protected routes - require authentication
 	s.router.Group(func(r chi.Router) {
@@ -123,30 +122,15 @@ func (s *Server) getCurrentUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch user from database
-	var user models.User
-	err := s.db.QueryRow(
-		r.Context(),
-		"SELECT id, firstname, lastname FROM athlete WHERE id = $1",
-		userID,
-	).Scan(&user.ID, &user.Firstname, &user.Lastname)
-
+	athlete, err := s.queries.GetAthlete(r.Context(), userID)
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			http.Error(w, "User not found", http.StatusNotFound)
-			return
-		}
 		slog.Error("Failed to fetch user", "error", err)
-		http.Error(w, "Failed to fetch user", http.StatusInternalServerError)
+		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(user)
-}
-
-func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
-	listUsers(s.db)(w, r)
+	json.NewEncoder(w).Encode(athlete)
 }
 
 func (s *Server) listRoutesWithoutRouteData(w http.ResponseWriter, r *http.Request) {
@@ -154,7 +138,7 @@ func (s *Server) listRoutesWithoutRouteData(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		http.Error(w, "user_id not found in context", http.StatusBadRequest)
 	}
-	listRoutesByUser(s.db, userID)(w, r) // excludeRoute = true
+	listRoutesByUser(s.queries, userID)(w, r)
 }
 
 func (s *Server) updateCacheForUser(w http.ResponseWriter, r *http.Request) {
@@ -207,16 +191,14 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Insert or update user in database
-	_, err = s.db.Exec(r.Context(), `
-		INSERT INTO athlete (id, firstname, lastname, access_token, refresh_token, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT(id) DO UPDATE SET
-			firstname = excluded.firstname,
-			lastname = excluded.lastname,
-			access_token = excluded.access_token,
-			refresh_token = excluded.refresh_token,
-			expires_at = excluded.expires_at
-	`, userID, user.FirstName, user.LastName, user.AccessToken, user.RefreshToken, user.ExpiresAt.Unix())
+	err = s.queries.UpsertAthlete(r.Context(), db.UpsertAthleteParams{
+		ID:           userID,
+		Firstname:    pgtype.Text{String: user.FirstName, Valid: true},
+		Lastname:     pgtype.Text{String: user.LastName, Valid: true},
+		AccessToken:  pgtype.Text{String: user.AccessToken, Valid: true},
+		RefreshToken: pgtype.Text{String: user.RefreshToken, Valid: true},
+		ExpiresAt:    pgtype.Int8{Int64: user.ExpiresAt.Unix(), Valid: true},
+	})
 
 	if err != nil {
 		http.Error(w, "Failed to save user", http.StatusInternalServerError)
@@ -326,56 +308,14 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func listUsers(db *pgxpool.Pool) http.HandlerFunc {
+func listRoutesByUser(q *db.Queries, userID int64) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.Query(r.Context(), "SELECT id, firstname, lastname, expires_at, refresh_token, access_token FROM athlete")
-		if err != nil {
-			http.Error(w, "Failed to query users", http.StatusInternalServerError)
-			return
-		}
-		defer rows.Close()
-
-		var users []models.User
-		for rows.Next() {
-			var user models.User
-			if err := rows.Scan(&user.ID, &user.Firstname, &user.Lastname, &user.ExpiresAt, &user.RefreshToken, &user.AccessToken); err != nil {
-				http.Error(w, "Failed to scan user", http.StatusInternalServerError)
-				return
-			}
-			users = append(users, user)
-		}
-		if err := rows.Err(); err != nil {
-			http.Error(w, "Error iterating over users", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(users)
-	}
-}
-
-func listRoutesByUser(db *pgxpool.Pool, userID int64) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.Query(r.Context(), "SELECT id, user_id, start_date, name, elapsed_time, moving_time, distance, average_speed, elevation, bounds FROM route WHERE user_id = $1 ORDER BY start_date DESC", userID)
+		routes, err := q.ListRoutesByUser(r.Context(), userID)
 		if err != nil {
 			http.Error(w, "Failed to query routes", http.StatusInternalServerError)
 			return
 		}
-		defer rows.Close()
 
-		var routes []models.Route
-		for rows.Next() {
-			var route models.Route
-			if err := rows.Scan(&route.ID, &route.UserID, &route.StartDate, &route.Name, &route.ElapsedTime, &route.MovingTime, &route.Distance, &route.AverageSpeed, &route.Elevation, &route.Bounds); err != nil {
-				http.Error(w, fmt.Sprintf("Failed to scan route: %v", err), http.StatusInternalServerError)
-				return
-			}
-
-			routes = append(routes, route)
-		}
-		if err := rows.Err(); err != nil {
-			http.Error(w, "Error iterating over routes", http.StatusInternalServerError)
-			return
-		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(routes)
 	}

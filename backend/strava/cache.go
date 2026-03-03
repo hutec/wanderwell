@@ -7,25 +7,29 @@ import (
 	"log/slog"
 	"sync"
 	"wanderwell/backend/config"
+	"wanderwell/backend/db"
 	"wanderwell/backend/models"
 
 	swagger "wanderwell/backend/client"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/twpayne/go-polyline"
 )
 
 type CacheUpdater struct {
 	db        *pgxpool.Pool
+	queries   *db.Queries
 	dbMutex   sync.Mutex
 	cfg       *config.Config
 	stravaAPI *StravaAPI
 }
 
-func NewCacheUpdater(db *pgxpool.Pool, cfg *config.Config, api *StravaAPI) *CacheUpdater {
+func NewCacheUpdater(pool *pgxpool.Pool, cfg *config.Config, api *StravaAPI) *CacheUpdater {
 	return &CacheUpdater{
-		db:        db,
+		db:        pool,
+		queries:   db.New(pool),
 		cfg:       cfg,
 		stravaAPI: api,
 	}
@@ -38,22 +42,7 @@ func (cu *CacheUpdater) GetAllUserActivities(userID int64, maxPages int) ([]swag
 }
 
 func (cu *CacheUpdater) GetUserIDs() ([]int64, error) {
-	rows, err := cu.db.Query(context.Background(), "SELECT id FROM athlete")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var userIDs []int64
-	for rows.Next() {
-		var userID int64
-		if err := rows.Scan(&userID); err != nil {
-			return nil, err
-		}
-		userIDs = append(userIDs, userID)
-	}
-
-	return userIDs, rows.Err()
+	return cu.queries.ListAthleteIDs(context.Background())
 }
 
 // UpdateActivityCache fetches all activities for a user and updates the local cache (database)
@@ -76,8 +65,10 @@ func (cu *CacheUpdater) UpdateActivityCache(userID int64) error {
 		}
 
 		// Check if activity already exists in the database and add it if not
-		var currentName string
-		err := cu.db.QueryRow(context.Background(), "SELECT name FROM route WHERE id = $1 and user_id = $2", activity.Id, userID).Scan(&currentName)
+		currentName, err := cu.queries.GetRouteName(context.Background(), db.GetRouteNameParams{
+			ID:     activity.Id,
+			UserID: userID,
+		})
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				// Can be a go-routine once rate limiting in concurrent calls is handled
@@ -91,7 +82,11 @@ func (cu *CacheUpdater) UpdateActivityCache(userID int64) error {
 		if currentName != activity.Name {
 			slog.Info("Activity name changed, updating", "activityID", activity.Id, "oldName", currentName, "newName", activity.Name)
 			cu.dbMutex.Lock()
-			_, err = cu.db.Exec(context.Background(), "UPDATE route SET name = $1 WHERE id = $2 and user_id = $3", activity.Name, activity.Id, userID)
+			err = cu.queries.UpdateRouteName(context.Background(), db.UpdateRouteNameParams{
+				Name:   activity.Name,
+				ID:     activity.Id,
+				UserID: userID,
+			})
 			cu.dbMutex.Unlock()
 			if err != nil {
 				slog.Error("Failed to update activity name", "error", err)
@@ -121,39 +116,58 @@ func (cu *CacheUpdater) AddDetailedActivity(activityID int64, athleteID int64) e
 		return nil
 	}
 
-	routePolyline := detailedActivity.Map_.Polyline
-	route := &models.Route{
-		ID:           detailedActivity.Id,
-		UserID:       detailedActivity.Athlete.Id,
-		StartDate:    detailedActivity.StartDate,
-		Name:         detailedActivity.Name,
-		ElapsedTime:  detailedActivity.ElapsedTime,
-		MovingTime:   detailedActivity.MovingTime,
-		Distance:     float32(detailedActivity.Distance) / 1000.0, // Convert to kilometers
-		Route:        &routePolyline,
-		AverageSpeed: float32(detailedActivity.AverageSpeed) * 3.6, // Convert to km/h
-		Elevation:    float32(detailedActivity.TotalElevationGain),
-		Bounds:       bounds,
+	// Decode polyline to WKT geometry
+	var wkt *string
+	coords, _, decodeErr := polyline.DecodeCoords([]byte(detailedActivity.Map_.Polyline))
+	if decodeErr != nil {
+		slog.Error("Error decoding polyline for route", "route_id", activityID, "err", decodeErr)
+	} else {
+		wktValue := models.CoordsToWKT(coords)
+		wkt = &wktValue
 	}
+
+	startDate := pgtype.Timestamptz{Time: detailedActivity.StartDate, Valid: true}
 
 	cu.dbMutex.Lock()
 	defer cu.dbMutex.Unlock()
-	exists, err := route.Exists(context.Background(), cu.db)
+
+	exists, err := cu.queries.RouteExists(context.Background(), activityID)
 	if err != nil {
 		return err
 	}
 
 	if exists {
-		err = route.Update(context.Background(), cu.db)
+		err = cu.queries.UpdateRoute(context.Background(), db.UpdateRouteParams{
+			ID:             activityID,
+			UserID:         detailedActivity.Athlete.Id,
+			StartDate:      startDate,
+			Name:           detailedActivity.Name,
+			ElapsedTime:    detailedActivity.ElapsedTime,
+			MovingTime:     detailedActivity.MovingTime,
+			Distance:       float64(detailedActivity.Distance) / 1000.0,
+			AverageSpeed:   float64(detailedActivity.AverageSpeed) * 3.6,
+			Elevation:      float64(detailedActivity.TotalElevationGain),
+			Bounds:         bounds,
+			StGeomfromtext: wkt,
+		})
 		slog.Info("Updated activity in cache", "activityID", activityID, "userID", athleteID)
 	} else {
-		err = route.Add(context.Background(), cu.db)
+		err = cu.queries.InsertRoute(context.Background(), db.InsertRouteParams{
+			ID:             activityID,
+			UserID:         detailedActivity.Athlete.Id,
+			StartDate:      startDate,
+			Name:           detailedActivity.Name,
+			ElapsedTime:    detailedActivity.ElapsedTime,
+			MovingTime:     detailedActivity.MovingTime,
+			Distance:       float64(detailedActivity.Distance) / 1000.0,
+			AverageSpeed:   float64(detailedActivity.AverageSpeed) * 3.6,
+			Elevation:      float64(detailedActivity.TotalElevationGain),
+			Bounds:         bounds,
+			StGeomfromtext: wkt,
+		})
 		slog.Info("Added new activity to cache", "activityID", activityID, "userID", athleteID)
 	}
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func computeBounds(buf []byte) (string, error) {

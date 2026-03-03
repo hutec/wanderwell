@@ -134,38 +134,6 @@ func (q *Queries) ListAthleteIDs(ctx context.Context) ([]int64, error) {
 	return items, nil
 }
 
-const listAthletes = `-- name: ListAthletes :many
-SELECT id, firstname, lastname, expires_at, refresh_token, access_token
-FROM athlete
-`
-
-func (q *Queries) ListAthletes(ctx context.Context) ([]Athlete, error) {
-	rows, err := q.db.Query(ctx, listAthletes)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Athlete
-	for rows.Next() {
-		var i Athlete
-		if err := rows.Scan(
-			&i.ID,
-			&i.Firstname,
-			&i.Lastname,
-			&i.ExpiresAt,
-			&i.RefreshToken,
-			&i.AccessToken,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listRoutesByUser = `-- name: ListRoutesByUser :many
 SELECT id, user_id, start_date, name, elapsed_time, moving_time, distance, average_speed, elevation, bounds
 FROM route

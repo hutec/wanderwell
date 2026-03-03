@@ -5,7 +5,7 @@ export const authState = $state({
 	isAuthenticated: false,
 	/** @type {boolean} */
 	isLoading: true,
-	/** @type {{ id: string, name: string } | null} */
+	/** @type {{ id: string, firstname: string, lastname: string } | null} */
 	currentUser: null
 });
 

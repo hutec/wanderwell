@@ -106,7 +106,7 @@
 					<div class="mb-4 flex items-start justify-between gap-3">
 						<p class="text-sm text-slate-600">
 							Logged in as
-							<span class="font-semibold text-slate-900">{authState.currentUser?.name}</span>
+							<span class="font-semibold text-slate-900">{authState.currentUser?.firstname}</span>
 						</p>
 						<button
 							type="button"
