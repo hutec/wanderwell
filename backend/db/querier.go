@@ -12,14 +12,13 @@ type Querier interface {
 	GetAthlete(ctx context.Context, id int64) (GetAthleteRow, error)
 	GetAthleteTokens(ctx context.Context, id int64) (GetAthleteTokensRow, error)
 	GetRouteName(ctx context.Context, arg GetRouteNameParams) (string, error)
-	InsertRoute(ctx context.Context, arg InsertRouteParams) error
 	ListAthleteIDs(ctx context.Context) ([]int64, error)
 	ListRoutesByUser(ctx context.Context, userID int64) ([]ListRoutesByUserRow, error)
 	RouteExists(ctx context.Context, id int64) (bool, error)
 	UpdateAthleteTokens(ctx context.Context, arg UpdateAthleteTokensParams) error
-	UpdateRoute(ctx context.Context, arg UpdateRouteParams) error
 	UpdateRouteName(ctx context.Context, arg UpdateRouteNameParams) error
 	UpsertAthlete(ctx context.Context, arg UpsertAthleteParams) error
+	UpsertRoute(ctx context.Context, arg UpsertRouteParams) error
 }
 
 var _ Querier = (*Queries)(nil)

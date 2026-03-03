@@ -73,42 +73,6 @@ func (q *Queries) GetRouteName(ctx context.Context, arg GetRouteNameParams) (str
 	return name, err
 }
 
-const insertRoute = `-- name: InsertRoute :exec
-INSERT INTO route (id, user_id, start_date, name, elapsed_time, moving_time, distance, average_speed, elevation, bounds, geom)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, ST_GeomFromText($11, 4326))
-`
-
-type InsertRouteParams struct {
-	ID             int64              `json:"id"`
-	UserID         int64              `json:"user_id"`
-	StartDate      pgtype.Timestamptz `json:"start_date"`
-	Name           string             `json:"name"`
-	ElapsedTime    int32              `json:"elapsed_time"`
-	MovingTime     int32              `json:"moving_time"`
-	Distance       float64            `json:"distance"`
-	AverageSpeed   float64            `json:"average_speed"`
-	Elevation      float64            `json:"elevation"`
-	Bounds         string             `json:"bounds"`
-	StGeomfromtext interface{}        `json:"st_geomfromtext"`
-}
-
-func (q *Queries) InsertRoute(ctx context.Context, arg InsertRouteParams) error {
-	_, err := q.db.Exec(ctx, insertRoute,
-		arg.ID,
-		arg.UserID,
-		arg.StartDate,
-		arg.Name,
-		arg.ElapsedTime,
-		arg.MovingTime,
-		arg.Distance,
-		arg.AverageSpeed,
-		arg.Elevation,
-		arg.Bounds,
-		arg.StGeomfromtext,
-	)
-	return err
-}
-
 const listAthleteIDs = `-- name: ListAthleteIDs :many
 SELECT id
 FROM athlete
@@ -216,52 +180,6 @@ func (q *Queries) UpdateAthleteTokens(ctx context.Context, arg UpdateAthleteToke
 	return err
 }
 
-const updateRoute = `-- name: UpdateRoute :exec
-UPDATE route
-SET user_id       = $1,
-    start_date    = $2,
-    name          = $3,
-    elapsed_time  = $4,
-    moving_time   = $5,
-    distance      = $6,
-    average_speed = $7,
-    elevation     = $8,
-    bounds        = $9,
-    geom          = ST_GeomFromText($11, 4326)
-WHERE id = $10
-`
-
-type UpdateRouteParams struct {
-	UserID         int64              `json:"user_id"`
-	StartDate      pgtype.Timestamptz `json:"start_date"`
-	Name           string             `json:"name"`
-	ElapsedTime    int32              `json:"elapsed_time"`
-	MovingTime     int32              `json:"moving_time"`
-	Distance       float64            `json:"distance"`
-	AverageSpeed   float64            `json:"average_speed"`
-	Elevation      float64            `json:"elevation"`
-	Bounds         string             `json:"bounds"`
-	ID             int64              `json:"id"`
-	StGeomfromtext interface{}        `json:"st_geomfromtext"`
-}
-
-func (q *Queries) UpdateRoute(ctx context.Context, arg UpdateRouteParams) error {
-	_, err := q.db.Exec(ctx, updateRoute,
-		arg.UserID,
-		arg.StartDate,
-		arg.Name,
-		arg.ElapsedTime,
-		arg.MovingTime,
-		arg.Distance,
-		arg.AverageSpeed,
-		arg.Elevation,
-		arg.Bounds,
-		arg.ID,
-		arg.StGeomfromtext,
-	)
-	return err
-}
-
 const updateRouteName = `-- name: UpdateRouteName :exec
 UPDATE route
 SET name = $1
@@ -307,6 +225,53 @@ func (q *Queries) UpsertAthlete(ctx context.Context, arg UpsertAthleteParams) er
 		arg.AccessToken,
 		arg.RefreshToken,
 		arg.ExpiresAt,
+	)
+	return err
+}
+
+const upsertRoute = `-- name: UpsertRoute :exec
+INSERT INTO route (id, user_id, start_date, name, elapsed_time, moving_time, distance, average_speed, elevation, bounds, geom)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, ST_GeomFromText($11, 4326))
+ON CONFLICT (id) DO UPDATE SET
+    user_id       = EXCLUDED.user_id,
+    start_date    = EXCLUDED.start_date,
+    name          = EXCLUDED.name,
+    elapsed_time  = EXCLUDED.elapsed_time,
+    moving_time   = EXCLUDED.moving_time,
+    distance      = EXCLUDED.distance,
+    average_speed = EXCLUDED.average_speed,
+    elevation     = EXCLUDED.elevation,
+    bounds        = EXCLUDED.bounds,
+    geom          = EXCLUDED.geom
+`
+
+type UpsertRouteParams struct {
+	ID             int64              `json:"id"`
+	UserID         int64              `json:"user_id"`
+	StartDate      pgtype.Timestamptz `json:"start_date"`
+	Name           string             `json:"name"`
+	ElapsedTime    int32              `json:"elapsed_time"`
+	MovingTime     int32              `json:"moving_time"`
+	Distance       float64            `json:"distance"`
+	AverageSpeed   float64            `json:"average_speed"`
+	Elevation      float64            `json:"elevation"`
+	Bounds         string             `json:"bounds"`
+	StGeomfromtext interface{}        `json:"st_geomfromtext"`
+}
+
+func (q *Queries) UpsertRoute(ctx context.Context, arg UpsertRouteParams) error {
+	_, err := q.db.Exec(ctx, upsertRoute,
+		arg.ID,
+		arg.UserID,
+		arg.StartDate,
+		arg.Name,
+		arg.ElapsedTime,
+		arg.MovingTime,
+		arg.Distance,
+		arg.AverageSpeed,
+		arg.Elevation,
+		arg.Bounds,
+		arg.StGeomfromtext,
 	)
 	return err
 }

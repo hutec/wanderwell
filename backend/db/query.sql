@@ -33,23 +33,21 @@ SELECT COUNT(*) > 0
 FROM route
 WHERE id = $1;
 
--- name: InsertRoute :exec
+-- name: UpsertRoute :exec
 INSERT INTO route (id, user_id, start_date, name, elapsed_time, moving_time, distance, average_speed, elevation, bounds, geom)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, ST_GeomFromText($11, 4326));
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, ST_GeomFromText($11, 4326))
+ON CONFLICT (id) DO UPDATE SET
+    user_id       = EXCLUDED.user_id,
+    start_date    = EXCLUDED.start_date,
+    name          = EXCLUDED.name,
+    elapsed_time  = EXCLUDED.elapsed_time,
+    moving_time   = EXCLUDED.moving_time,
+    distance      = EXCLUDED.distance,
+    average_speed = EXCLUDED.average_speed,
+    elevation     = EXCLUDED.elevation,
+    bounds        = EXCLUDED.bounds,
+    geom          = EXCLUDED.geom;
 
--- name: UpdateRoute :exec
-UPDATE route
-SET user_id       = $1,
-    start_date    = $2,
-    name          = $3,
-    elapsed_time  = $4,
-    moving_time   = $5,
-    distance      = $6,
-    average_speed = $7,
-    elevation     = $8,
-    bounds        = $9,
-    geom          = ST_GeomFromText($11, 4326)
-WHERE id = $10;
 
 -- name: GetRouteName :one
 SELECT name
