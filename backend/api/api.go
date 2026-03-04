@@ -23,14 +23,16 @@ type Server struct {
 	cacheUpdater *strava.CacheUpdater
 	router       chi.Router
 	frontendURL  string
+	verifyToken  string
 }
 
-func NewServer(pool *pgxpool.Pool, cacheUpdater *strava.CacheUpdater, frontendURL string) *Server {
+func NewServer(pool *pgxpool.Pool, cacheUpdater *strava.CacheUpdater, frontendURL string, verifyToken string) *Server {
 	s := &Server{
 		queries:      db.New(pool),
 		cacheUpdater: cacheUpdater,
 		router:       chi.NewRouter(),
 		frontendURL:  frontendURL,
+		verifyToken:  verifyToken,
 	}
 	s.setupRoutes()
 	return s
@@ -239,7 +241,7 @@ func (s *Server) webhookCallbackChallenge(w http.ResponseWriter, r *http.Request
 	challenge := r.URL.Query().Get("hub.challenge")
 	verifyToken := r.URL.Query().Get("hub.verify_token")
 
-	expectedVerifyToken := "STRAVA" // Replace with your actual verify token
+	expectedVerifyToken := s.verifyToken
 	if mode == "subscribe" && verifyToken == expectedVerifyToken {
 		slog.Info("Webhook verified successfully")
 		w.Header().Set("Content-Type", "application/json")
@@ -248,6 +250,7 @@ func (s *Server) webhookCallbackChallenge(w http.ResponseWriter, r *http.Request
 			"hub.challenge": challenge,
 		})
 	} else {
+		slog.Warn("Webhook verification failed", "mode", mode, "verify_token", verifyToken, "expected_verify_token", expectedVerifyToken)
 		http.Error(w, "Verification failed", http.StatusForbidden)
 	}
 }
