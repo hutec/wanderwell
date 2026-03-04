@@ -10,6 +10,7 @@ type Config struct {
 	StravaClientSecret string
 	RedirectURI        string
 	WebhookURI         string
+	VerifyToken        string
 	DatabasePath       string
 	ServerPort         string // e.g., ":3000"
 	FrontendURL        string // for CORS
@@ -31,6 +32,7 @@ func Load() (*Config, error) {
 		StravaClientSecret: os.Getenv("STRAVA_CLIENT_SECRET"),
 		RedirectURI:        os.Getenv("REDIRECT_URI"),
 		WebhookURI:         os.Getenv("WEBHOOK_URI"),
+		VerifyToken:        os.Getenv("VERIFY_TOKEN"),
 		DatabasePath:       os.Getenv("DATABASE_PATH"),
 		ServerPort:         os.Getenv("SERVER_PORT"),
 		FrontendURL:        os.Getenv("FRONTEND_URL"),
@@ -44,6 +46,7 @@ func Load() (*Config, error) {
 		"STRAVA_CLIENT_SECRET": cfg.StravaClientSecret,
 		"REDIRECT_URI":         cfg.RedirectURI,
 		"WEBHOOK_URI":          cfg.WebhookURI,
+		"VERIFY_TOKEN":         cfg.VerifyToken,
 		"DATABASE_PATH":        cfg.DatabasePath,
 		"SERVER_PORT":          cfg.ServerPort,
 		"FRONTEND_URL":         cfg.FrontendURL,

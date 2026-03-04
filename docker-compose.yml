@@ -12,6 +12,7 @@ services:
       STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET}
       REDIRECT_URI: ${REDIRECT_URI}
       WEBHOOK_URI: ${WEBHOOK_URI}
+      VERIFY_TOKEN: ${VERIFY_TOKEN}
       DATABASE_PATH: postgres://postgres:${POSTGRES_PASSWORD}@postgis:5432/wanderwell?sslmode=disable
       SERVER_PORT: ":3000"
       FRONTEND_URL: ${FRONTEND_URL}
