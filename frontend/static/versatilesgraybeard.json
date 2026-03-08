@@ -1,11 +1,23 @@
 {
   "version": 8,
   "name": "versatiles-graybeard",
+  "terrain": {
+    "source": "terrainSource",
+    "exaggeration": 1
+  },
   "metadata": {
     "license": "https://creativecommons.org/publicdomain/zero/1.0/",
     "maputnik:renderer": "mlgljs"
   },
   "sources": {
+    "terrainSource": {
+      "type": "raster-dem",
+      "url": "https://tiles.mapterhorn.com/tilejson.json"
+    },
+    "hillshadeSource": {
+      "type": "raster-dem",
+      "url": "https://tiles.mapterhorn.com/tilejson.json"
+    },
     "versatiles-shortbread": {
       "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
       "tiles": ["https://tiles.versatiles.org/tiles/osm/{z}/{x}/{y}"],
@@ -4686,6 +4698,17 @@
       "paint": {
         "line-width": {"stops": [[13, 0], [16, 1], [17, 2], [18, 3], [20, 5]]},
         "line-color": "hsl(208,0%,73%)"
+      }
+    },
+    {
+      "id": "hills",
+      "type": "hillshade",
+      "source": "hillshadeSource",
+      "paint": {
+        "hillshade-shadow-color": "#a19a8d",
+        "hillshade-exaggeration": 0.5,
+        "hillshade-accent-color": "#ddd",
+        "hillshade-highlight-color": "#fff"
       }
     },
     {
