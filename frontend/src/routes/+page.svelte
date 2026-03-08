@@ -70,6 +70,63 @@
 	let isSidebarOpen = $state(true);
 	let map = $state<MapLibreMap | undefined>(undefined);
 
+	$effect(() => {
+		if (!map) return;
+
+		let popup: maplibregl.Popup | null = null;
+
+		const handleRouteClick = (
+			e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }
+		) => {
+			const features = e.features;
+			if (!features?.length) return;
+
+			const html = features
+				.map((feature) => {
+					const { name, start_date, distance } = feature.properties as {
+						name: string;
+						start_date: string;
+						distance: number;
+					};
+					const formattedDate = start_date
+						? new Date(start_date).toLocaleDateString(undefined, {
+								year: 'numeric',
+								month: 'long',
+								day: 'numeric'
+							})
+						: 'Unknown date';
+					const formattedDistance =
+						distance != null ? `${distance.toFixed(1)} km` : 'Unknown distance';
+					return `<strong>${name}</strong><br/><span>${formattedDate}</span><br/><span>${formattedDistance}</span>`;
+				})
+				.join('<hr/>');
+
+			popup?.remove();
+			popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false })
+				.setLngLat(e.lngLat)
+				.setHTML(html)
+				.addTo(map!);
+		};
+
+		const setCursorPointer = () => {
+			map!.getCanvas().style.cursor = 'pointer';
+		};
+		const resetCursor = () => {
+			map!.getCanvas().style.cursor = '';
+		};
+
+		map.on('click', 'Route', handleRouteClick);
+		map.on('mouseenter', 'Route', setCursorPointer);
+		map.on('mouseleave', 'Route', resetCursor);
+
+		return () => {
+			map!.off('click', 'Route', handleRouteClick);
+			map!.off('mouseenter', 'Route', setCursorPointer);
+			map!.off('mouseleave', 'Route', resetCursor);
+			popup?.remove();
+		};
+	});
+
 	const parseBounds = (bounds: string): LngLatBoundsType => {
 		// Input is LatLng bounds in the format "lat1,lng1,lat2,lng2"
 		if (bounds === '') return new LngLatBounds();
