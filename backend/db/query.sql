@@ -64,3 +64,47 @@ SELECT id, user_id, start_date, name, elapsed_time, moving_time, distance, avera
 FROM route
 WHERE user_id = $1
 ORDER BY start_date DESC;
+
+-- name: GetRouteNonOverlappingKm :one
+-- Computes the km of the route that don't come within 10m of any other route
+-- from the same user. Uses a point-sampling approach (one point per 20m) with
+-- geometry ST_DWithin so the GIST spatial index is used for each lookup.
+WITH target AS (
+    SELECT geom, user_id
+    FROM route
+    WHERE route.id = $1
+      AND geom IS NOT NULL
+),
+densified AS (
+    -- Resample the route to one vertex every 20m for uniform coverage
+    SELECT ST_Segmentize(t.geom::geography, 20)::geometry AS dgeom, t.user_id
+    FROM target t
+),
+pts AS (
+    SELECT (dp).path[1] AS n, (dp).geom AS pt, d.user_id
+    FROM densified d
+    CROSS JOIN LATERAL ST_DumpPoints(d.dgeom) dp
+),
+pt_covered AS (
+    -- A point is "covered" if any other route from the same user passes within 10m.
+    -- 0.0001 degrees ≈ 11m; using geometry (not geography) keeps the GIST index active.
+    SELECT p.n, p.pt,
+           EXISTS (
+               SELECT 1
+               FROM route o
+               WHERE o.user_id = p.user_id
+                 AND o.id <> $1
+                 AND o.geom IS NOT NULL
+                 AND ST_DWithin(p.pt, o.geom, 0.0001)
+           ) AS covered
+    FROM pts p
+),
+segs AS (
+    -- A segment is unique if at least one of its endpoints is not covered
+    SELECT ST_MakeLine(a.pt, b.pt) AS seg,
+           NOT (a.covered AND b.covered) AS is_unique
+    FROM pt_covered a
+    JOIN pt_covered b ON b.n = a.n + 1
+)
+SELECT COALESCE(SUM(ST_Length(seg::geography)) FILTER (WHERE is_unique), 0) AS non_overlapping_km
+FROM segs;

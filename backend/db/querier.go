@@ -12,6 +12,10 @@ type Querier interface {
 	GetAthlete(ctx context.Context, id int64) (GetAthleteRow, error)
 	GetAthleteTokens(ctx context.Context, id int64) (GetAthleteTokensRow, error)
 	GetRouteName(ctx context.Context, arg GetRouteNameParams) (string, error)
+	// Computes the km of the route that don't come within 10m of any other route
+	// from the same user. Uses a point-sampling approach (one point per 20m) with
+	// geometry ST_DWithin so the GIST spatial index is used for each lookup.
+	GetRouteNonOverlappingKm(ctx context.Context, id int64) (interface{}, error)
 	ListAthleteIDs(ctx context.Context) ([]int64, error)
 	ListRoutesByUser(ctx context.Context, userID int64) ([]ListRoutesByUserRow, error)
 	RouteExists(ctx context.Context, id int64) (bool, error)

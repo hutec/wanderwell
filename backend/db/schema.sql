@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS route (
 
 -- Create spatial index
 CREATE INDEX IF NOT EXISTS route_geom_idx ON route USING GIST (geom);
+CREATE INDEX IF NOT EXISTS route_user_id_id_idx ON route (user_id, id);
 
 -- Create MVT function for user routes
 CREATE OR REPLACE FUNCTION user_routes(z int, x int, y int, query_params json)
