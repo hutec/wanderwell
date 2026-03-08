@@ -1,6 +1,6 @@
 <script lang="ts">
 	import RouteList from '$lib/RouteList.svelte';
-	import { routesState } from '$lib/state.svelte';
+	import { routesState, loadRoutes } from '$lib/state.svelte';
 	import { getBaseStyle } from '$lib/mapStyle.svelte';
 	import { tileServerEndpoint } from '$lib/config';
 	import { checkAuth, login, logout, authState } from '$lib/auth.svelte';
@@ -17,6 +17,10 @@
 
 	$effect(() => {
 		checkAuth();
+	});
+
+	$effect(() => {
+		loadRoutes(authState.currentUser?.id);
 	});
 
 	let mapStyle = $state<StyleSpecification | null>(null);
@@ -133,7 +137,7 @@
 						</button>
 					</div>
 					<div class="min-h-0 flex-1">
-						<RouteList userID={authState.currentUser?.id} />
+						<RouteList />
 					</div>
 				{:else}
 					<div class="flex h-full items-start justify-end">
