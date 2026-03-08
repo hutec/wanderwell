@@ -51,6 +51,7 @@ services:
 
   tileserver:
     image: ghcr.io/maplibre/martin:latest
+    command: ["--cache-size", "0"]
     ports:
       - "3001:3000"
     environment:
