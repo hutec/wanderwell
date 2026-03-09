@@ -105,15 +105,16 @@ func (cu *CacheUpdater) AddDetailedActivity(activityID int64, athleteID int64) e
 	if err != nil {
 		return err
 	}
-	bounds, err := computeBounds([]byte(detailedActivity.Map_.Polyline))
-	if err != nil {
-		return err
-	}
 
 	// Skip activities with empty polyline
 	if detailedActivity.Map_ == nil || detailedActivity.Map_.Polyline == "" {
 		slog.Info("Skipping activity with empty polyline", "activityID", activityID, "sportType", detailedActivity.SportType)
 		return nil
+	}
+
+	bounds, err := computeBounds([]byte(detailedActivity.Map_.Polyline))
+	if err != nil {
+		return err
 	}
 
 	// Decode polyline to WKT geometry

@@ -49,7 +49,7 @@ func main() {
 
 	// Validate required flags
 	if *postgisConn == "" {
-		log.Fatal("Error: -postgis flag is required\n\nUsage example:\n  go run cmd/export/postgis.go -sqlite=elmo.db -postgis=\"postgres://user:pass@localhost/dbname?sslmode=disable\"")
+		log.Fatal("Error: -postgis flag is required\n\nUsage example:\n  go run cmd/export/migrate_sqlite_to_postgis.go -sqlite=elmo.db -postgis=\"postgres://user:pass@localhost/dbname?sslmode=disable\"")
 	}
 
 	// Open SQLite database
