@@ -33,6 +33,8 @@ func initDB(databasePath string) (*pgxpool.Pool, error) {
 
 func ensureSchema(pool *pgxpool.Pool) error {
 	schema := `
+		CREATE EXTENSION IF NOT EXISTS postgis;
+
 		CREATE TABLE IF NOT EXISTS athlete (
 			id BIGINT PRIMARY KEY,
 			firstname TEXT,
@@ -42,19 +44,19 @@ func ensureSchema(pool *pgxpool.Pool) error {
 			access_token TEXT
 		);
 		CREATE TABLE IF NOT EXISTS route (
-			id BIGINT PRIMARY KEY,
-			user_id BIGINT,
-			start_date TIMESTAMP,
-			name VARCHAR,
-			elapsed_time INTEGER,
-			moving_time INTEGER,
-			distance FLOAT,
-			average_speed FLOAT,
-			elevation FLOAT,
-			bounds TEXT,
-			sport_type VARCHAR,
-			geom GEOMETRY(LineString, 4326),
-			FOREIGN KEY(user_id) REFERENCES athlete(id)
+    		id            BIGINT PRIMARY KEY,
+    		user_id       BIGINT NOT NULL,
+    		start_date    TIMESTAMPTZ NOT NULL,
+    		name          VARCHAR NOT NULL,
+    		elapsed_time  INTEGER NOT NULL,
+    		moving_time   INTEGER NOT NULL,
+    		distance      FLOAT NOT NULL,
+    		average_speed FLOAT NOT NULL,
+    		elevation     FLOAT NOT NULL,
+    		bounds        TEXT NOT NULL,
+    		sport_type    VARCHAR,
+    		geom          geometry(LineString, 4326),
+    		FOREIGN KEY (user_id) REFERENCES athlete(id)
 		);
 
 		-- Create spatial index

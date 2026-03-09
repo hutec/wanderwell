@@ -127,7 +127,7 @@ func (s *Server) getCurrentUser(w http.ResponseWriter, r *http.Request) {
 	athlete, err := s.queries.GetAthlete(r.Context(), userID)
 	if err != nil {
 		slog.Error("Failed to fetch user", "error", err)
-		http.Error(w, "User not found", http.StatusNotFound)
+		http.Error(w, "Failed to fetch user", http.StatusInternalServerError)
 		return
 	}
 
@@ -139,6 +139,7 @@ func (s *Server) listRoutesWithoutRouteData(w http.ResponseWriter, r *http.Reque
 	userID, ok := r.Context().Value(userIDKey).(int64)
 	if !ok {
 		http.Error(w, "user_id not found in context", http.StatusBadRequest)
+		return
 	}
 	listRoutesByUser(s.queries, userID)(w, r)
 }
@@ -185,8 +186,9 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("Failed to complete user authentication", "error", err)
 		http.Error(w, "Failed to complete user authentication", http.StatusInternalServerError)
+		return
 	}
-	slog.Info("User authenticated", "user", user)
+	slog.Info("User authenticated", "user", user.UserID)
 	userID, err := strconv.ParseInt(user.UserID, 10, 64)
 	if err != nil {
 		slog.Error("Failed to parse userID", "error", err)
@@ -250,7 +252,6 @@ func (s *Server) webhookCallbackChallenge(w http.ResponseWriter, r *http.Request
 			"hub.challenge": challenge,
 		})
 	} else {
-		slog.Warn("Webhook verification failed", "mode", mode, "verify_token", verifyToken, "expected_verify_token", expectedVerifyToken)
 		http.Error(w, "Verification failed", http.StatusForbidden)
 	}
 }

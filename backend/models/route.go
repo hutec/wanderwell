@@ -5,6 +5,7 @@ import (
 )
 
 // CoordsToWKT converts a slice of coordinates to a WKT (Well-Known Text) representation of a LINESTRING
+// TODO: Can be optimized
 func CoordsToWKT(coords [][]float64) string {
 	if len(coords) == 0 {
 		return "LINESTRING EMPTY"

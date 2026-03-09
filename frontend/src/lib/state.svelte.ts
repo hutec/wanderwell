@@ -7,7 +7,7 @@ export const routesState = $state({
 	isLoadingRoutes: false
 });
 
-export async function loadRoutes(userID: string | undefined) {
+export async function loadRoutes(userID: number | undefined) {
 	if (!userID) {
 		routesState.availableRoutes = [];
 		return;
