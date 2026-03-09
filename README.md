@@ -51,3 +51,11 @@ curl -G https://www.strava.com/api/v3/push_subscriptions \
   -d client_id=$STRAVA_CLIENT_ID \
   -d client_secret=$STRAVA_CLIENT_SECRET
 ```
+
+## Dev
+
+### Connect to the database
+
+```sh
+docker compose exec postgis psql -U postgres -d wanderwell
+```
