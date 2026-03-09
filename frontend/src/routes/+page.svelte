@@ -4,6 +4,8 @@
 	import { getBaseStyle } from '$lib/mapStyle.svelte';
 	import { tileServerEndpoint } from '$lib/config';
 	import { checkAuth, login, logout, authState } from '$lib/auth.svelte';
+	import ConnectWithStrava from '$lib/ConnectWithStrava.svelte';
+	import PoweredByStrava from '$lib/PoweredByStrava.svelte';
 	import type { Route } from '$lib/types/route';
 
 	import { MapLibre } from 'svelte-maplibre-gl';
@@ -140,16 +142,13 @@
 						<RouteList />
 					</div>
 				{:else}
-					<div class="flex h-full items-start justify-end">
-						<button
-							type="button"
-							class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:outline-none"
-							onclick={login}
-						>
-							Login
-						</button>
+					<div class="flex h-full items-start justify-center">
+						<ConnectWithStrava />
 					</div>
 				{/if}
+			</div>
+			<div class="flex items-center justify-center border-t border-slate-100 px-4 py-3">
+				<PoweredByStrava />
 			</div>
 		</aside>
 	{:else}
