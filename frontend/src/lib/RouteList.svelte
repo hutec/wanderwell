@@ -29,6 +29,15 @@
 							<div class="text-xs text-slate-500">
 								{new Date(route.start_date).toLocaleDateString()} · {formatDistance(route.distance)}
 							</div>
+							<a
+								href="https://www.strava.com/activities/{route.id}"
+								target="_blank"
+								rel="noopener noreferrer"
+								class="mt-1 inline-block text-xs font-bold text-[#FC5200] hover:underline"
+								onclick={(e) => e.stopPropagation()}
+							>
+								View on Strava
+							</a>
 						</div>
 					</label>
 				</li>
