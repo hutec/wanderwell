@@ -18,6 +18,7 @@ services:
       FRONTEND_URL: ${FRONTEND_URL}
       SESSION_SECRET: ${SESSION_SECRET}
       SESSION_KEY: ${SESSION_KEY}
+      TILE_CACHE_URL: http://vinylcache:80
     restart: unless-stopped
 
   frontend:
@@ -52,13 +53,21 @@ services:
   tileserver:
     image: ghcr.io/maplibre/martin:latest
     command: ["--cache-size", "0"]
-    ports:
-      - "3001:3000"
     environment:
       - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@postgis:5432/wanderwell?sslmode=disable
     depends_on:
       postgis:
         condition: service_healthy
+    restart: unless-stopped
+
+  vinylcache:
+    image: varnish:stable
+    ports:
+      - "3001:80"
+    volumes:
+      - ./varnish/default.vcl:/etc/varnish/default.vcl:ro
+    depends_on:
+      - tileserver
     restart: unless-stopped
 
 volumes:

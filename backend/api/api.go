@@ -24,15 +24,17 @@ type Server struct {
 	router       chi.Router
 	frontendURL  string
 	verifyToken  string
+	tileCacheURL string
 }
 
-func NewServer(pool *pgxpool.Pool, cacheUpdater *strava.CacheUpdater, frontendURL string, verifyToken string) *Server {
+func NewServer(pool *pgxpool.Pool, cacheUpdater *strava.CacheUpdater, frontendURL string, verifyToken string, tileCacheURL string) *Server {
 	s := &Server{
 		queries:      db.New(pool),
 		cacheUpdater: cacheUpdater,
 		router:       chi.NewRouter(),
 		frontendURL:  frontendURL,
 		verifyToken:  verifyToken,
+		tileCacheURL: tileCacheURL,
 	}
 	s.setupRoutes()
 	return s
@@ -107,6 +109,27 @@ func (s *Server) Start(addr string) error {
 	return http.ListenAndServe(addr, s.router)
 }
 
+// purgeTileCache sends a BAN request to Vinyl Cache to invalidate all cached tiles for a user.
+// It is a no-op when no tile cache URL is configured.
+func (s *Server) purgeTileCache(userID int64) {
+	if s.tileCacheURL == "" {
+		return
+	}
+	req, err := http.NewRequest("BAN", s.tileCacheURL, nil)
+	if err != nil {
+		slog.Error("Failed to create tile cache BAN request", "userID", userID, "error", err)
+		return
+	}
+	req.Header.Set("X-User-Id", strconv.FormatInt(userID, 10))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		slog.Error("Failed to send tile cache BAN request", "userID", userID, "error", err)
+		return
+	}
+	defer resp.Body.Close()
+	slog.Info("Tile cache ban sent", "userID", userID, "status", resp.Status)
+}
+
 func parseUserID(r *http.Request) (int64, error) {
 	userIDParam := chi.URLParam(r, "userID")
 	var userID int64
@@ -161,7 +184,9 @@ func (s *Server) updateCacheForUser(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		if err := s.cacheUpdater.UpdateActivityCache(userID); err != nil {
 			slog.Error("Failed to fetch initial activities for user", "userID", userID, "error", err)
+			return
 		}
+		s.purgeTileCache(userID)
 	}()
 	w.WriteHeader(http.StatusOK)
 }
@@ -287,6 +312,7 @@ func (s *Server) webhookCallbackUpdate(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Failed to process activity", http.StatusInternalServerError)
 			return
 		}
+		s.purgeTileCache(stravaEvent.OwnerID)
 		w.WriteHeader(http.StatusOK)
 	} else {
 		slog.Info("Unhandled aspect type in webhook event", "aspect_type", stravaEvent.AspectType)

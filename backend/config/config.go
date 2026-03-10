@@ -17,6 +17,8 @@ type Config struct {
 	// for goth sessions
 	SESSION_SECRET string
 	SESSION_KEY    string
+	// optional: URL of the Vinyl Cache tile proxy for cache invalidation
+	TileCacheURL string
 }
 
 func validateRequired(name, value string) error {
@@ -38,6 +40,7 @@ func Load() (*Config, error) {
 		FrontendURL:        os.Getenv("FRONTEND_URL"),
 		SESSION_SECRET:     os.Getenv("SESSION_SECRET"),
 		SESSION_KEY:        os.Getenv("SESSION_KEY"),
+		TileCacheURL:       os.Getenv("TILE_CACHE_URL"),
 	}
 
 	// Validate required fields
