@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 	"wanderwell/backend/db"
 	"wanderwell/backend/strava"
 
@@ -121,7 +122,8 @@ func (s *Server) purgeTileCache(userID int64) {
 		return
 	}
 	req.Header.Set("X-User-Id", strconv.FormatInt(userID, 10))
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		slog.Error("Failed to send tile cache BAN request", "userID", userID, "error", err)
 		return
@@ -312,8 +314,10 @@ func (s *Server) webhookCallbackUpdate(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Failed to process activity", http.StatusInternalServerError)
 			return
 		}
-		s.purgeTileCache(stravaEvent.OwnerID)
+		// Respond to Strava first to avoid webhook retries, then purge cache asynchronously.
 		w.WriteHeader(http.StatusOK)
+		go s.purgeTileCache(stravaEvent.OwnerID)
+		return
 	} else {
 		slog.Info("Unhandled aspect type in webhook event", "aspect_type", stravaEvent.AspectType)
 		w.WriteHeader(http.StatusOK)
