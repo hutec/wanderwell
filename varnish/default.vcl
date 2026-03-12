@@ -23,7 +23,7 @@ sub vcl_recv {
         if (!req.http.X-User-Id) {
             return(synth(400, "X-User-Id header required"));
         }
-        ban("req.url ~ user_id=" + req.http.X-User-Id);
+        ban("req.url ~ [?&]user_id=" + req.http.X-User-Id + "(&|$)");
         return(synth(200, "Ban added"));
     }
 
