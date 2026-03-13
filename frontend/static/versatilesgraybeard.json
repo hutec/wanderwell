@@ -5129,18 +5129,6 @@
       }
     },
     {
-      "id": "Route",
-      "type": "line",
-      "source": "AllRoutes",
-      "source-layer": "user_routes",
-      "layout": {"line-cap": "butt", "visibility": "visible"},
-      "paint": {
-        "line-opacity": 1,
-        "line-color": "rgba(203, 110, 148, 1)",
-        "line-width": 0.9
-      }
-    },
-    {
       "id": "boundary-country:outline",
       "type": "line",
       "source": "versatiles-shortbread",
@@ -5251,6 +5239,18 @@
       "paint": {
         "line-color": "hsl(240,0%,72%)",
         "line-width": {"stops": [[7, 0], [8, 1], [10, 2]]}
+      }
+    },
+    {
+      "id": "Route",
+      "type": "line",
+      "source": "AllRoutes",
+      "source-layer": "user_routes",
+      "layout": {"line-cap": "butt", "visibility": "visible"},
+      "paint": {
+        "line-opacity": 1,
+        "line-color": "rgba(203, 110, 148, 1)",
+        "line-width": 0.9
       }
     },
     {
