@@ -106,10 +106,12 @@ func (s *Server) setupRoutes() {
 		r.Get("/me", s.getCurrentUser)
 		r.Get("/route_details", s.listRoutesWithoutRouteData)
 		r.Get("/update", s.updateCacheForUser)
+		// Dummy endpoint to allow Traefik to verify authentication for tile
+		// requests without needing to duplicate auth logic in the tile service.
+		r.Get("/auth/tiles", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
 	})
-
-	// ForwardAuth endpoint for Traefik tile middleware
-	s.router.Get("/auth/tiles", s.tileForwardAuth)
 
 	// Public routes
 	s.router.Get("/start", s.initiateAuthentication)
@@ -337,19 +339,6 @@ func (s *Server) webhookCallbackUpdate(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}
 	// TODO: Handle delete events if needed
-}
-
-func (s *Server) tileForwardAuth(w http.ResponseWriter, r *http.Request) {
-	session, err := gothic.Store.Get(r, "user-session")
-	if err != nil || session.IsNew {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	if _, ok := session.Values["user_id"]; !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
