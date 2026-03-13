@@ -87,7 +87,18 @@ func (s *Server) setupRoutes() {
 		MaxAge:           300, // Maximum value not ignored by any of major browsers
 	}))
 
-	s.router.Use(httplog.RequestLogger(slog.Default(), nil))
+	// Request logging for all routes except the high-volume /auth/tiles ForwardAuth endpoint.
+	loggerMiddleware := httplog.RequestLogger(slog.Default(), nil)
+	s.router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/auth/tiles" {
+				// Skip request logging for tile ForwardAuth to avoid log noise and disk usage.
+				next.ServeHTTP(w, r)
+				return
+			}
+			loggerMiddleware(next).ServeHTTP(w, r)
+		})
+	})
 
 	// Protected routes - require authentication
 	s.router.Group(func(r chi.Router) {
