@@ -5,7 +5,8 @@ WORKDIR /app
 
 # Install dependencies first for better caching
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,id=frontend-npm,target=/root/.npm \
+    npm ci
 
 # Copy the rest of the app and build
 COPY . .
