@@ -5254,6 +5254,27 @@
       }
     },
     {
+      "id": "RouteArrows",
+      "type": "symbol",
+      "source": "AllRoutes",
+      "source-layer": "user_routes",
+      "minzoom": 9,
+      "layout": {
+        "symbol-placement": "line",
+        "symbol-spacing": 100,
+        "text-field": "\u203a",
+        "text-size": 24,
+        "text-rotation-alignment": "map",
+        "text-keep-upright": false,
+        "visibility": "visible"
+      },
+      "paint": {
+        "text-color": "rgba(203, 110, 148, 1)",
+        "text-halo-color": "rgba(255, 255, 255, 0.7)",
+        "text-halo-width": 1
+      }
+    },
+    {
       "id": "label-address-housenumber",
       "type": "symbol",
       "source": "versatiles-shortbread",

@@ -43,11 +43,16 @@
 		}
 
 		if (style.layers) {
-			const routeLayer = style.layers.find((layer) => layer.id === 'Route');
-			if (routeLayer && routesState.routes.length > 0) {
-				routeLayer.filter = ['all', ['in', 'id', ...routesState.routes.map((route) => route.id)]];
-			} else if (routeLayer) {
-				delete routeLayer.filter;
+			const selectedIds = routesState.routes.map((route) => route.id);
+			const filter = ['all', ['in', 'id', ...selectedIds]];
+
+			for (const layerId of ['Route', 'RouteArrows']) {
+				const layer = style.layers.find((l: { id: string }) => l.id === layerId);
+				if (layer && selectedIds.length > 0) {
+					layer.filter = filter;
+				} else if (layer) {
+					delete layer.filter;
+				}
 			}
 		}
 
