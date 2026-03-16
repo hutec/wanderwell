@@ -1,0 +1,59 @@
+services:
+  traefik:
+    image: traefik:latest
+    command:
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.le.acme.tlschallenge=true"
+      - "--certificatesresolvers.le.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+
+  backend:
+    ports: !reset []
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=le"
+      - "traefik.http.routers.backend.middlewares=backend-strip"
+      - "traefik.http.middlewares.backend-strip.stripprefix.prefixes=/api"
+      - "traefik.http.services.backend.loadbalancer.server.port=3000"
+
+  frontend:
+    ports: !reset []
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=le"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+
+  postgis:
+    ports: !reset []
+    labels:
+      - "traefik.enable=false"
+
+  tileserver:
+    ports: !reset []
+    command: ["--cache-size", "0", "--base-path", "/tiles"]
+    labels:
+      - "traefik.enable=false"
+
+  vinylcache:
+    ports: !reset []
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tiles.rule=Host(`${DOMAIN}`) && PathPrefix(`/tiles`)"
+      - "traefik.http.routers.tiles.entrypoints=websecure"
+      - "traefik.http.routers.tiles.tls.certresolver=le"
+      - "traefik.http.routers.tiles.middlewares=tiles-strip,tile-auth"
+      - "traefik.http.middlewares.tiles-strip.stripprefix.prefixes=/tiles"
+      - "traefik.http.middlewares.tile-auth.forwardauth.address=http://backend:3000/auth/tiles"
+      - "traefik.http.services.tiles.loadbalancer.server.port=80"
