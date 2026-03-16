@@ -88,7 +88,7 @@
 <div class="relative flex h-screen w-full overflow-hidden bg-slate-100 text-slate-900">
 	{#if isSidebarOpen}
 		<aside
-			class="relative z-30 flex h-full w-80 max-w-[85vw] shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm"
+			class="absolute inset-y-0 left-0 z-30 flex h-full w-80 max-w-[85vw] shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm md:relative"
 		>
 			<div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
 				<div>
