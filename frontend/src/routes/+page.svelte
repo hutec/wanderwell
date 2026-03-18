@@ -52,6 +52,14 @@
 					layer.filter = filter;
 				} else if (layer) {
 					delete layer.filter;
+
+					// If no routes are selected, hide the arrow layer
+					if (layerId == 'RouteArrows') {
+						layer.layout = {
+							...layer.layout,
+							visibility: 'none'
+						};
+					}
 				}
 			}
 		}
