@@ -99,10 +99,10 @@
 </script>
 
 <div class="relative flex h-screen w-full overflow-hidden bg-slate-100 text-slate-900">
-	{#if isSidebarOpen}
-		<aside
-			class="absolute inset-y-0 left-0 z-30 flex h-full w-80 max-w-[85vw] shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm md:relative"
-		>
+	<aside
+		class="absolute inset-y-0 left-0 z-30 flex h-full w-80 max-w-[85vw] shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm md:relative"
+		class:hidden={!isSidebarOpen}
+	>
 			<div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
 				<div>
 					<h1 class="text-base font-semibold tracking-tight">Wanderwell</h1>
@@ -165,16 +165,15 @@
 				{/if}
 			</div>
 		</aside>
-	{:else}
-		<button
-			type="button"
-			class="absolute top-4 left-4 z-40 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-md transition hover:bg-slate-50 focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:outline-none"
-			aria-label="Show sidebar"
-			onclick={() => (isSidebarOpen = true)}
-		>
-			Show sidebar
-		</button>
-	{/if}
+	<button
+		type="button"
+		class="absolute top-4 left-4 z-40 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-md transition hover:bg-slate-50 focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:outline-none"
+		class:hidden={isSidebarOpen}
+		aria-label="Show sidebar"
+		onclick={() => (isSidebarOpen = true)}
+	>
+		Show sidebar
+	</button>
 
 	<main class="min-h-0 flex-1">
 		{#if activeMapStyle}
