@@ -81,33 +81,58 @@
 			const features = e.features;
 			if (!features?.length) return;
 
-			const items = features
-				.map((feature) => {
-					const { name, start_date, distance } = feature.properties as {
-						name: string;
-						start_date: string;
-						distance: number;
-					};
-					const formattedDate = start_date
-						? new Date(start_date).toLocaleDateString(undefined, {
-								year: 'numeric',
-								month: 'long',
-								day: 'numeric'
-							})
-						: 'Unknown date';
-					const formattedDistance =
-						distance != null ? `${distance.toFixed(1)} km` : 'Unknown distance';
-					return `<div style="margin-bottom:6px;"><strong>${name}</strong><br/><span>${formattedDate}</span><br/><span>${formattedDistance}</span></div>`;
-				})
-				.join('<hr style="margin:6px 0;"/>');
+			const container = document.createElement('div');
+			container.style.cssText =
+				'max-height:200px; overflow:auto; padding:6px; box-sizing:border-box;';
 
-			// Wrap content in a scrollable container so long popups can be scrolled
-			const html = `<div style="max-height:200px; overflow:auto; padding:6px; box-sizing:border-box;">${items}</div>`;
+			features.forEach((feature, index) => {
+				const { name, start_date, distance, id } = feature.properties as {
+					name: string;
+					start_date: string;
+					distance: number;
+					id: number;
+				};
+				const formattedDate = start_date
+					? new Date(start_date).toLocaleDateString(undefined, {
+							year: 'numeric',
+							month: 'long',
+							day: 'numeric'
+						})
+					: 'Unknown date';
+				const formattedDistance =
+					distance != null ? `${distance.toFixed(1)} km` : 'Unknown distance';
+
+				if (index > 0) {
+					const hr = document.createElement('hr');
+					hr.style.margin = '6px 0';
+					container.appendChild(hr);
+				}
+
+				const row = document.createElement('div');
+				row.style.cssText =
+					'margin-bottom:4px; cursor:pointer; padding:4px 6px; border-radius:4px; transition:background 0.15s;';
+				row.innerHTML = `<strong>${name}</strong><br/><span style="font-size:0.85em; color:#64748b;">${formattedDate} · ${formattedDistance}</span>`;
+
+				row.addEventListener('mouseenter', () => {
+					row.style.backgroundColor = '#f1f5f9';
+				});
+				row.addEventListener('mouseleave', () => {
+					row.style.backgroundColor = '';
+				});
+				row.addEventListener('click', (ev) => {
+					ev.stopPropagation();
+					routesState.focusedRouteId = Number(id);
+					popup?.remove();
+					popup = null;
+				});
+
+				container.appendChild(row);
+			});
 
 			popup?.remove();
 			popup = new maplibregl.Popup({ closeButton: false, closeOnClick: true })
 				.setLngLat(e.lngLat)
-				.setHTML(html)
+				.setDOMContent(container)
 				.addTo(map!);
 		};
 
