@@ -67,7 +67,6 @@
 		return style;
 	});
 
-	let isSidebarOpen = $state(true);
 	let map = $state<MapLibreMap | undefined>(undefined);
 
 	$effect(() => {
@@ -190,7 +189,7 @@
 <div class="relative flex h-screen w-full overflow-hidden bg-slate-100 text-slate-900">
 	<aside
 		class="absolute inset-y-0 left-0 z-30 flex h-full w-80 max-w-[85vw] shrink-0 flex-col border-r border-slate-200 bg-white shadow-sm md:relative"
-		class:hidden={!isSidebarOpen}
+		class:hidden={!routesState.isSidebarOpen}
 	>
 		<div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
 			<div>
@@ -201,7 +200,7 @@
 				type="button"
 				class="rounded-md border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:outline-none"
 				aria-label="Collapse sidebar"
-				onclick={() => (isSidebarOpen = false)}
+				onclick={() => (routesState.isSidebarOpen = false)}
 			>
 				✕
 			</button>
@@ -257,9 +256,9 @@
 	<button
 		type="button"
 		class="absolute top-4 left-4 z-40 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-md transition hover:bg-slate-50 focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:outline-none"
-		class:hidden={isSidebarOpen}
+		class:hidden={routesState.isSidebarOpen}
 		aria-label="Show sidebar"
-		onclick={() => (isSidebarOpen = true)}
+		onclick={() => (routesState.isSidebarOpen = true)}
 	>
 		Show sidebar
 	</button>
