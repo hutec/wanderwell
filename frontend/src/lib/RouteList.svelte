@@ -4,6 +4,12 @@
 	const formatDistance = (distance: number) => {
 		return `${distance.toFixed(2)} km`;
 	};
+
+	$effect(() => {
+		const id = routesState.focusedRouteId;
+		if (id == null) return;
+		document.getElementById(`route-${id}`)?.scrollIntoView({ block: 'center' });
+	});
 </script>
 
 <div class="flex h-full flex-col gap-3">
@@ -14,9 +20,15 @@
 	{:else}
 		<ul class="flex-1 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
 			{#each routesState.availableRoutes as route (route.id)}
-				<li class="border-b border-slate-100 last:border-b-0">
+				<li
+					id="route-{route.id}"
+					class="border-b border-slate-100 last:border-b-0"
+					class:border-l-2={route.id === routesState.focusedRouteId}
+					class:border-l-amber-400={route.id === routesState.focusedRouteId}
+				>
 					<label
 						class="flex cursor-pointer items-start gap-3 px-4 py-3 transition hover:bg-slate-50"
+						class:bg-amber-50={route.id === routesState.focusedRouteId}
 					>
 						<input
 							type="checkbox"

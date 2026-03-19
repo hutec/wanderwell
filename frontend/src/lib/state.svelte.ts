@@ -4,7 +4,8 @@ import type { Route } from '$lib/types/route';
 export const routesState = $state({
 	routes: [] as Route[],
 	availableRoutes: [] as Route[],
-	isLoadingRoutes: false
+	isLoadingRoutes: false,
+	focusedRouteId: null as number | null
 });
 
 export async function loadRoutes(userID: number | undefined) {
