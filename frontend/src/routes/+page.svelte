@@ -46,7 +46,7 @@
 			const selectedIds = routesState.routes.map((route) => route.id);
 			const filter = ['all', ['in', 'id', ...selectedIds]];
 
-			for (const layerId of ['Route', 'RouteArrows']) {
+			for (const layerId of ['RouteHitArea', 'Route', 'RouteArrows']) {
 				const layer = style.layers.find((l: { id: string }) => l.id === layerId);
 				if (layer && selectedIds.length > 0) {
 					layer.filter = filter;
@@ -118,12 +118,16 @@
 			map!.getCanvas().style.cursor = '';
 		};
 
-		map.on('click', 'Route', handleRouteClick);
+		map.on('click', 'RouteHitArea', handleRouteClick);
+		map.on('mouseenter', 'RouteHitArea', setCursorPointer);
+		map.on('mouseleave', 'RouteHitArea', resetCursor);
 		map.on('mouseenter', 'Route', setCursorPointer);
 		map.on('mouseleave', 'Route', resetCursor);
 
 		return () => {
-			map!.off('click', 'Route', handleRouteClick);
+			map!.off('click', 'RouteHitArea', handleRouteClick);
+			map!.off('mouseenter', 'RouteHitArea', setCursorPointer);
+			map!.off('mouseleave', 'RouteHitArea', resetCursor);
 			map!.off('mouseenter', 'Route', setCursorPointer);
 			map!.off('mouseleave', 'Route', resetCursor);
 			popup?.remove();

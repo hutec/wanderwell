@@ -5242,6 +5242,18 @@
       }
     },
     {
+      "id": "RouteHitArea",
+      "type": "line",
+      "source": "AllRoutes",
+      "source-layer": "user_routes",
+      "layout": {"line-cap": "butt", "visibility": "visible"},
+      "paint": {
+        "line-opacity": 0,
+        "line-color": "rgba(0,0,0,0)",
+        "line-width": 20
+      }
+    },
+    {
       "id": "Route",
       "type": "line",
       "source": "AllRoutes",
