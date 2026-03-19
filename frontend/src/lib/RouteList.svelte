@@ -7,7 +7,9 @@
 
 	$effect(() => {
 		const id = routesState.focusedRouteId;
-		if (id == null) return;
+		// Also track sidebar open state so the scroll re-fires when the sidebar becomes visible
+		const isOpen = routesState.isSidebarOpen;
+		if (id == null || !isOpen) return;
 		document.getElementById(`route-${id}`)?.scrollIntoView({ block: 'center' });
 	});
 </script>
