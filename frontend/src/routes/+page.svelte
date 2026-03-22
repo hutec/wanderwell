@@ -85,6 +85,7 @@
 				'max-height:200px; overflow:auto; padding:6px; box-sizing:border-box;';
 
 			features.forEach((feature, index) => {
+				if (feature.properties == null) return;
 				const { name, start_date, distance, id } = feature.properties as {
 					name: string;
 					start_date: string;
@@ -110,7 +111,16 @@
 				const row = document.createElement('div');
 				row.style.cssText =
 					'margin-bottom:4px; cursor:pointer; padding:4px 6px; border-radius:4px; transition:background 0.15s;';
-				row.innerHTML = `<strong>${name}</strong><br/><span style="font-size:0.85em; color:#64748b;">${formattedDate} · ${formattedDistance}</span>`;
+				const strong = document.createElement('strong');
+				strong.textContent = name;
+				const br = document.createElement('br');
+				const meta = document.createElement('span');
+				meta.style.cssText = 'font-size:0.85em; color:#64748b;';
+				meta.textContent = `${formattedDate} · ${formattedDistance}`;
+
+				row.appendChild(strong);
+				row.appendChild(br);
+				row.appendChild(meta);
 
 				row.addEventListener('mouseenter', () => {
 					row.style.backgroundColor = '#f1f5f9';
