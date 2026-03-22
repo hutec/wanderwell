@@ -4,6 +4,8 @@
 	import { getBaseStyle } from '$lib/mapStyle.svelte';
 	import { tileServerEndpoint } from '$lib/config';
 	import { checkAuth, login, logout, authState } from '$lib/auth.svelte';
+	import { mount, unmount } from 'svelte';
+	import RoutePopupContent from '$lib/RoutePopupContent.svelte';
 	import type { Route } from '$lib/types/route';
 
 	import { MapLibre } from 'svelte-maplibre-gl';
@@ -80,62 +82,21 @@
 			const features = e.features;
 			if (!features?.length) return;
 
+			const parsedFeatures = features
+				.filter((f) => f.properties != null)
+				.map((f) => f.properties as Route);
+
 			const container = document.createElement('div');
-			container.style.cssText =
-				'max-height:200px; overflow:auto; padding:6px; box-sizing:border-box;';
-
-			features.forEach((feature, index) => {
-				if (feature.properties == null) return;
-				const { name, start_date, distance, id } = feature.properties as {
-					name: string;
-					start_date: string;
-					distance: number;
-					id: number;
-				};
-				const formattedDate = start_date
-					? new Date(start_date).toLocaleDateString(undefined, {
-							year: 'numeric',
-							month: 'long',
-							day: 'numeric'
-						})
-					: 'Unknown date';
-				const formattedDistance =
-					distance != null ? `${distance.toFixed(1)} km` : 'Unknown distance';
-
-				if (index > 0) {
-					const hr = document.createElement('hr');
-					hr.style.margin = '6px 0';
-					container.appendChild(hr);
+			const component = mount(RoutePopupContent, {
+				target: container,
+				props: {
+					features: parsedFeatures,
+					onSelect: (id: number) => {
+						routesState.focusedRouteId = id;
+						popup?.remove();
+						popup = null;
+					}
 				}
-
-				const row = document.createElement('div');
-				row.style.cssText =
-					'margin-bottom:4px; cursor:pointer; padding:4px 6px; border-radius:4px; transition:background 0.15s;';
-				const strong = document.createElement('strong');
-				strong.textContent = name;
-				const br = document.createElement('br');
-				const meta = document.createElement('span');
-				meta.style.cssText = 'font-size:0.85em; color:#64748b;';
-				meta.textContent = `${formattedDate} · ${formattedDistance}`;
-
-				row.appendChild(strong);
-				row.appendChild(br);
-				row.appendChild(meta);
-
-				row.addEventListener('mouseenter', () => {
-					row.style.backgroundColor = '#f1f5f9';
-				});
-				row.addEventListener('mouseleave', () => {
-					row.style.backgroundColor = '';
-				});
-				row.addEventListener('click', (ev) => {
-					ev.stopPropagation();
-					routesState.focusedRouteId = Number(id);
-					popup?.remove();
-					popup = null;
-				});
-
-				container.appendChild(row);
 			});
 
 			popup?.remove();
@@ -143,6 +104,10 @@
 				.setLngLat(e.lngLat)
 				.setDOMContent(container)
 				.addTo(map!);
+
+			popup.on('close', () => {
+				unmount(component);
+			});
 		};
 
 		const setCursorPointer = () => {
