@@ -61,6 +61,14 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  overlay-tilerserver:
+    image: maptiler/tileserver-gl:latest
+    command: "-p 4545 -c config.json"
+    volumes:
+      - ./tileserver-gl:/data
+    ports:
+      - 4545:4545
+
   vinylcache:
     image: varnish:stable
     ports:
