@@ -6,7 +6,8 @@ export const routesState = $state({
 	availableRoutes: [] as Route[],
 	isLoadingRoutes: false,
 	focusedRouteId: null as number | null,
-	isSidebarOpen: true
+	isSidebarOpen: true,
+	selectedRoutesVisible: true
 });
 
 export async function loadRoutes(userID: number | undefined) {

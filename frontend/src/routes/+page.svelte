@@ -46,21 +46,25 @@
 
 		if (style.layers) {
 			const selectedIds = routesState.routes.map((route) => route.id);
-			const filter = ['all', ['in', 'id', ...selectedIds]];
 
 			for (const layerId of ['RouteHitArea', 'Route', 'RouteArrows']) {
 				const layer = style.layers.find((l: { id: string }) => l.id === layerId);
-				if (layer && selectedIds.length > 0) {
-					layer.filter = filter;
-				} else if (layer) {
-					delete layer.filter;
+				if (!layer) continue;
 
-					// If no routes are selected, hide the arrow layer
-					if (layerId == 'RouteArrows') {
-						layer.layout = {
-							...layer.layout,
-							visibility: 'none'
-						};
+				if (selectedIds.length === 0) {
+					// No selection — show all routes, hide arrows
+					delete layer.filter;
+					if (layerId === 'RouteArrows') {
+						layer.layout = { ...layer.layout, visibility: 'none' };
+					}
+				} else if (routesState.selectedRoutesVisible) {
+					// Show selected only
+					layer.filter = ['all', ['in', 'id', ...selectedIds]];
+				} else {
+					// Hide selected — show everything except selected
+					layer.filter = ['all', ['!in', 'id', ...selectedIds]];
+					if (layerId === 'RouteArrows') {
+						layer.layout = { ...layer.layout, visibility: 'none' };
 					}
 				}
 			}
@@ -211,6 +215,44 @@
 					>
 						Snap to selection
 					</button>
+				</div>
+				<div class="mb-4 flex justify-center">
+					<div class="inline-flex rounded-full border border-slate-200 bg-slate-100 p-0.5">
+						<label
+							class="cursor-pointer rounded-full px-3 py-1 text-sm transition-all select-none"
+							class:bg-white={routesState.selectedRoutesVisible}
+							class:shadow-sm={routesState.selectedRoutesVisible}
+							class:font-medium={routesState.selectedRoutesVisible}
+							class:text-amber-800={routesState.selectedRoutesVisible}
+							class:text-slate-500={!routesState.selectedRoutesVisible}
+						>
+							<input
+								type="radio"
+								name="route-visibility"
+								class="sr-only"
+								bind:group={routesState.selectedRoutesVisible}
+								value={true}
+							/>
+							Show selected
+						</label>
+						<label
+							class="cursor-pointer rounded-full px-3 py-1 text-sm transition-all select-none"
+							class:bg-white={!routesState.selectedRoutesVisible}
+							class:shadow-sm={!routesState.selectedRoutesVisible}
+							class:font-medium={!routesState.selectedRoutesVisible}
+							class:text-amber-800={!routesState.selectedRoutesVisible}
+							class:text-slate-500={routesState.selectedRoutesVisible}
+						>
+							<input
+								type="radio"
+								name="route-visibility"
+								class="sr-only"
+								bind:group={routesState.selectedRoutesVisible}
+								value={false}
+							/>
+							Hide selected
+						</label>
+					</div>
 				</div>
 				<div class="min-h-0 flex-1">
 					<RouteList />
