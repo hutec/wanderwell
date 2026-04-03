@@ -29,7 +29,7 @@
 
 	$effect(() => {
 		getBaseStyle(routesState.selectedBasemap).then((style) => {
-			mapStyle = style as StyleSpecification;
+			mapStyle = style;
 		});
 	});
 

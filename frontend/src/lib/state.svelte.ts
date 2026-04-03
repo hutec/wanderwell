@@ -1,7 +1,7 @@
 import { apiEndpoint } from '$lib/config';
 import type { Route } from '$lib/types/route';
 
-export const BASEMAP_KEYS = ['graybeard', 'colorful'];
+export const BASEMAP_KEYS = ['graybeard', 'colorful'] as const;
 export type BasemapKey = (typeof BASEMAP_KEYS)[number];
 
 export const routesState = $state({
