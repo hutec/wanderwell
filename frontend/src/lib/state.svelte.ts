@@ -1,13 +1,16 @@
 import { apiEndpoint } from '$lib/config';
 import type { Route } from '$lib/types/route';
 
+export type BasemapKey = 'graybeard' | 'colorful' | 'neutrino';
+
 export const routesState = $state({
 	routes: [] as Route[],
 	availableRoutes: [] as Route[],
 	isLoadingRoutes: false,
 	focusedRouteId: null as number | null,
 	isSidebarOpen: true,
-	selectedRoutesVisible: true
+	selectedRoutesVisible: true,
+	selectedBasemap: 'graybeard' as BasemapKey
 });
 
 export async function loadRoutes(userID: number | undefined) {

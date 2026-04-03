@@ -1,6 +1,6 @@
 <script lang="ts">
 	import RouteList from '$lib/RouteList.svelte';
-	import { routesState, loadRoutes } from '$lib/state.svelte';
+	import { routesState, loadRoutes, type BasemapKey } from '$lib/state.svelte';
 	import { getBaseStyle } from '$lib/mapStyle.svelte';
 	import { tileServerEndpoint } from '$lib/config';
 	import { checkAuth, login, logout, authState } from '$lib/auth.svelte';
@@ -28,7 +28,7 @@
 	let mapStyle = $state<StyleSpecification | null>(null);
 
 	$effect(() => {
-		getBaseStyle().then((style) => {
+		getBaseStyle(routesState.selectedBasemap).then((style) => {
 			mapStyle = style as StyleSpecification;
 		});
 	});
@@ -186,6 +186,29 @@
 		</div>
 
 		<div class="flex min-h-0 flex-1 flex-col p-4">
+			<div class="mb-4 flex justify-center">
+				<div class="inline-flex rounded-full border border-slate-200 bg-slate-100 p-0.5">
+					{#each [['graybeard', 'Graybeard'], ['colorful', 'Colorful'], ['neutrino', 'Neutrino']] as [key, label] (key)}
+						<label
+							class="cursor-pointer rounded-full px-3 py-1 text-sm transition-all select-none"
+							class:bg-white={routesState.selectedBasemap === key}
+							class:shadow-sm={routesState.selectedBasemap === key}
+							class:font-medium={routesState.selectedBasemap === key}
+							class:text-slate-900={routesState.selectedBasemap === key}
+							class:text-slate-500={routesState.selectedBasemap !== key}
+						>
+							<input
+								type="radio"
+								name="basemap"
+								class="sr-only"
+								bind:group={routesState.selectedBasemap}
+								value={key as BasemapKey}
+							/>
+							{label}
+						</label>
+					{/each}
+				</div>
+			</div>
 			{#if authState.isAuthenticated}
 				<div class="mb-4 flex items-start justify-between gap-3">
 					<p class="text-sm text-slate-600">
