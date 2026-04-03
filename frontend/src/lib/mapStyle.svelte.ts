@@ -2,8 +2,7 @@ import { type BasemapKey } from '$lib/state.svelte';
 
 const BASEMAP_FILES: Record<BasemapKey, string> = {
 	graybeard: '/versatilesgraybeard.json',
-	colorful: '/versatilescolorful.json',
-	neutrino: '/versatilesneutrino.json'
+	colorful: '/versatilescolorful.json'
 };
 
 export async function getBaseStyle(key: BasemapKey = 'graybeard'): Promise<string> {
