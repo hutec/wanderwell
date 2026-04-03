@@ -1,6 +1,6 @@
 <script lang="ts">
 	import RouteList from '$lib/RouteList.svelte';
-	import { routesState, loadRoutes, type BasemapKey } from '$lib/state.svelte';
+	import { routesState, loadRoutes, type BasemapKey, BASEMAP_KEYS } from '$lib/state.svelte';
 	import { getBaseStyle } from '$lib/mapStyle.svelte';
 	import { tileServerEndpoint } from '$lib/config';
 	import { checkAuth, login, logout, authState } from '$lib/auth.svelte';
@@ -188,7 +188,7 @@
 		<div class="flex min-h-0 flex-1 flex-col p-4">
 			<div class="mb-4 flex justify-center">
 				<div class="inline-flex rounded-full border border-slate-200 bg-slate-100 p-0.5">
-					{#each [['graybeard', 'Graybeard'], ['colorful', 'Colorful'], ['neutrino', 'Neutrino']] as [key, label] (key)}
+					{#each BASEMAP_KEYS as key (key)}
 						<label
 							class="cursor-pointer rounded-full px-3 py-1 text-sm transition-all select-none"
 							class:bg-white={routesState.selectedBasemap === key}
@@ -204,7 +204,7 @@
 								bind:group={routesState.selectedBasemap}
 								value={key as BasemapKey}
 							/>
-							{label}
+							{key.charAt(0).toUpperCase() + key.slice(1)}
 						</label>
 					{/each}
 				</div>
