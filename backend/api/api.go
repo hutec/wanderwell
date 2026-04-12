@@ -235,6 +235,11 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request) {
 
 	// Check if this is a new user before upserting
 	_, err = s.queries.GetAthlete(r.Context(), userID)
+	if err != nil && err != pgx.ErrNoRows {
+		slog.Error("Failed to look up athlete", "userID", userID, "error", err)
+		http.Error(w, "Failed to load user", http.StatusInternalServerError)
+		return
+	}
 	isNewUser := err == pgx.ErrNoRows
 
 	// Insert or update user in database
