@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httplog/v3"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/markbates/goth/gothic"
@@ -232,6 +233,10 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request) {
 		slog.Error("Failed to parse userID", "error", err)
 	}
 
+	// Check if this is a new user before upserting
+	_, err = s.queries.GetAthlete(r.Context(), userID)
+	isNewUser := err == pgx.ErrNoRows
+
 	// Insert or update user in database
 	err = s.queries.UpsertAthlete(r.Context(), db.UpsertAthleteParams{
 		ID:           userID,
@@ -265,12 +270,17 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request) {
 
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 
-	// start background task to fetch and cache user activities
-	// go func() {
-	// 	if err = s.cacheUpdater.UpdateActivityCache(userID); err != nil {
-	// 		slog.Error("Failed to fetch initial activities for user", "userID", userID, "error", err)
-	// 	}
-	// }()
+	// Start background task to fetch and cache activities for first-time users only.
+	// Existing users are kept up to date via Strava webhooks.
+	if isNewUser {
+		go func() {
+			if err := s.cacheUpdater.UpdateActivityCache(userID); err != nil {
+				slog.Error("Failed to fetch initial activities for user", "userID", userID, "error", err)
+				return
+			}
+			s.purgeTileCache(userID)
+		}()
+	}
 }
 
 // webhookCallback subscribes to Strava webhook events
