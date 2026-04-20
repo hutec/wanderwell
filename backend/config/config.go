@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 )
 
 type Config struct {
@@ -19,6 +20,8 @@ type Config struct {
 	SESSION_KEY    string
 	// optional: URL of the Vinyl Cache tile proxy for cache invalidation
 	TileCacheURL string
+	// optional: Strava user ID of the admin user (for restricted endpoints)
+	AdminUserID int64
 }
 
 func validateRequired(name, value string) error {
@@ -41,6 +44,15 @@ func Load() (*Config, error) {
 		SESSION_SECRET:     os.Getenv("SESSION_SECRET"),
 		SESSION_KEY:        os.Getenv("SESSION_KEY"),
 		TileCacheURL:       os.Getenv("TILE_CACHE_URL"),
+	}
+
+	// Parse optional AdminUserID
+	if adminIDStr := os.Getenv("ADMIN_USER_ID"); adminIDStr != "" {
+		adminID, err := strconv.ParseInt(adminIDStr, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("ADMIN_USER_ID must be a valid integer: %w", err)
+		}
+		cfg.AdminUserID = adminID
 	}
 
 	// Validate required fields
