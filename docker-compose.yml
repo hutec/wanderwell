@@ -19,6 +19,7 @@ services:
       SESSION_SECRET: ${SESSION_SECRET}
       SESSION_KEY: ${SESSION_KEY}
       TILE_CACHE_URL: http://vinylcache:80
+      ADMIN_USER_ID: ${ADMIN_USER_ID}
     restart: unless-stopped
 
   frontend:
