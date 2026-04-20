@@ -177,16 +177,6 @@ func (s *Server) purgeTileCache(userID int64) {
 	slog.Info("Tile cache ban sent", "userID", userID, "status", resp.Status)
 }
 
-func parseUserID(r *http.Request) (int64, error) {
-	userIDParam := chi.URLParam(r, "userID")
-	var userID int64
-	_, err := fmt.Sscan(userIDParam, &userID)
-	if err != nil {
-		return 0, fmt.Errorf("invalid user ID: %w", err)
-	}
-	return userID, nil
-}
-
 func (s *Server) getCurrentUser(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value(userIDKey).(int64)
 	if !ok {
@@ -215,15 +205,11 @@ func (s *Server) listRoutesWithoutRouteData(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) updateCacheForUser(w http.ResponseWriter, r *http.Request) {
-
-	userID, err := parseUserID(r)
+	userIDParam := r.URL.Query().Get("userID")
+	userID, err := strconv.ParseInt(userIDParam, 10, 64)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	code := r.URL.Query().Get("code")
-	if code != "UPDATE" {
-		http.Error(w, "Invalid code parameter", http.StatusBadRequest)
+		errorMsg := fmt.Sprintf("invalid user ID: %q", userIDParam)
+		http.Error(w, errorMsg, http.StatusBadRequest)
 		return
 	}
 
