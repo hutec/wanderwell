@@ -7,6 +7,23 @@ Canadian explorer, author, filmmaker, and aviator.
 This repository is the consolidation of a bunch of tools that I have written in
 the past with similar intents.
 
+## Environment Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `STRAVA_CLIENT_ID` | Yes | Strava API client ID |
+| `STRAVA_CLIENT_SECRET` | Yes | Strava API client secret |
+| `REDIRECT_URI` | Yes | OAuth redirect URI |
+| `WEBHOOK_URI` | Yes | Strava webhook callback URL |
+| `VERIFY_TOKEN` | Yes | Token for webhook verification |
+| `DATABASE_PATH` | Yes | PostgreSQL connection string |
+| `SERVER_PORT` | Yes | Backend listen address (e.g., `:3000`) |
+| `FRONTEND_URL` | Yes | Frontend URL for CORS |
+| `SESSION_SECRET` | Yes | Session encryption secret |
+| `SESSION_KEY` | Yes | Session key name |
+| `TILE_CACHE_URL` | No | URL of the tile cache proxy for invalidation |
+| `ADMIN_USER_ID` | No | Strava user ID for admin access (required for `/update` endpoint) |
+
 ## Setup
 
 ### Setup Strava Callback

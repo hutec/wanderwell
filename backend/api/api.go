@@ -26,9 +26,10 @@ type Server struct {
 	frontendURL  string
 	verifyToken  string
 	tileCacheURL string
+	adminUserID  int64
 }
 
-func NewServer(pool *pgxpool.Pool, cacheUpdater *strava.CacheUpdater, frontendURL string, verifyToken string, tileCacheURL string) *Server {
+func NewServer(pool *pgxpool.Pool, cacheUpdater *strava.CacheUpdater, frontendURL string, verifyToken string, tileCacheURL string, adminUserID int64) *Server {
 	s := &Server{
 		queries:      db.New(pool),
 		cacheUpdater: cacheUpdater,
@@ -36,6 +37,7 @@ func NewServer(pool *pgxpool.Pool, cacheUpdater *strava.CacheUpdater, frontendUR
 		frontendURL:  frontendURL,
 		verifyToken:  verifyToken,
 		tileCacheURL: tileCacheURL,
+		adminUserID:  adminUserID,
 	}
 	s.setupRoutes()
 	return s
@@ -76,6 +78,32 @@ func (s *Server) RequireAuth(next http.Handler) http.Handler {
 	})
 }
 
+// RequireAdmin is a middleware that checks if the user is the configured admin
+func (s *Server) RequireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// If no admin user is configured, adminUserID will have the int64 default value 0
+		if s.adminUserID == 0 {
+			slog.Warn("Admin endpoint accessed but no admin user configured")
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		userID, ok := r.Context().Value(userIDKey).(int64)
+		if !ok {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		if userID != s.adminUserID {
+			slog.Warn("Non-admin user attempted to access admin endpoint", "userID", userID)
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) setupRoutes() {
 	// CORS configuration
 	s.router.Use(cors.Handler(cors.Options{
@@ -100,12 +128,18 @@ func (s *Server) setupRoutes() {
 		r.Use(s.RequireAuth)
 		r.Get("/me", s.getCurrentUser)
 		r.Get("/route_details", s.listRoutesWithoutRouteData)
-		r.Get("/update", s.updateCacheForUser)
 		// Dummy endpoint to allow Traefik to verify authentication for tile
 		// requests without needing to duplicate auth logic in the tile service.
 		r.Get("/auth/tiles", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		})
+	})
+
+	// Admin-only routes - require authentication and admin privileges
+	s.router.Group(func(r chi.Router) {
+		r.Use(s.RequireAuth)
+		r.Use(s.RequireAdmin)
+		r.Get("/update", s.updateCacheForUser)
 	})
 
 	// Public routes
