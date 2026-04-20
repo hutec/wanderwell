@@ -205,10 +205,10 @@ func (s *Server) listRoutesWithoutRouteData(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) updateCacheForUser(w http.ResponseWriter, r *http.Request) {
-	userIDParam := r.URL.Query().Get("userID")
+	userIDParam := r.URL.Query().Get("user_id")
 	userID, err := strconv.ParseInt(userIDParam, 10, 64)
 	if err != nil {
-		errorMsg := fmt.Sprintf("invalid user ID: %q", userIDParam)
+		errorMsg := fmt.Sprintf("invalid user_id: %q", userIDParam)
 		http.Error(w, errorMsg, http.StatusBadRequest)
 		return
 	}
