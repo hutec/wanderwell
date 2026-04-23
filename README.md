@@ -76,3 +76,22 @@ curl -G https://www.strava.com/api/v3/push_subscriptions \
 ```sh
 docker compose exec postgis psql -U postgres -d wanderwell
 ```
+
+### Backup database
+
+```sh
+docker compose exec postgis pg_dump -U postgres wanderwell > wanderwell_backup.sql
+```
+
+### Restore database
+
+```sh
+docker compose exec -i postgis psql -U postgres -d wanderwell < wanderwell_backup.sql
+```
+
+Note: This might require you to drop the existing database and create a new one before running the command.
+
+```sh
+docker compose exec postgis psql -U postgres -c "DROP DATABASE IF EXISTS wanderwell;"
+docker compose exec postgis psql -U postgres -c "CREATE DATABASE wanderwell;"
+```
