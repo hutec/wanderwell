@@ -128,8 +128,6 @@ func (cu *CacheUpdater) AddDetailedActivity(activityID int64, athleteID int64) e
 	}
 
 	cu.dbMutex.Lock()
-	defer cu.dbMutex.Unlock()
-
 	err = cu.queries.UpsertRoute(context.Background(), db.UpsertRouteParams{
 		ID:             activityID,
 		UserID:         detailedActivity.Athlete.Id,
@@ -143,9 +141,40 @@ func (cu *CacheUpdater) AddDetailedActivity(activityID int64, athleteID int64) e
 		Bounds:         bounds,
 		StGeomfromtext: wkt,
 	})
+	cu.dbMutex.Unlock()
+	if err != nil {
+		return err
+	}
 	slog.Info("Upserted activity in cache", "activityID", activityID, "userID", athleteID)
 
-	return err
+	cu.writeNonOverlappingDescription(activityID, athleteID)
+	return nil
+}
+
+// writeNonOverlappingDescription computes non-overlapping km for the activity and
+// writes it back to the Strava activity description. Only runs for the admin user.
+// Errors are logged but do not affect the sync result.
+func (cu *CacheUpdater) writeNonOverlappingDescription(activityID int64, athleteID int64) {
+	if cu.cfg.AdminUserID == 0 || athleteID != cu.cfg.AdminUserID {
+		return
+	}
+
+	metres, err := cu.queries.GetRouteNonOverlappingKm(context.Background(), activityID)
+	if err != nil {
+		slog.Error("Failed to compute non-overlapping km", "activityID", activityID, "error", err)
+		return
+	}
+
+	metresFloat, ok := metres.(float64)
+	if !ok {
+		slog.Error("Unexpected type for non-overlapping km result", "activityID", activityID, "type", fmt.Sprintf("%T", metres))
+		return
+	}
+
+	description := fmt.Sprintf("🧭 New ground: %.2f km", metresFloat/1000.0)
+	if err := cu.stravaAPI.UpdateActivityDescription(activityID, athleteID, description); err != nil {
+		slog.Error("Failed to write non-overlapping description to Strava", "activityID", activityID, "error", err)
+	}
 }
 
 func computeBounds(buf []byte) (string, error) {

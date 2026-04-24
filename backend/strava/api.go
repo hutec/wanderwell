@@ -142,6 +142,35 @@ func (api *StravaAPI) GetAthleteSummaryActivitiesByPage(athleteID int64, page in
 	return allActivities, nil
 }
 
+// UpdateActivityDescription writes a new description to a Strava activity.
+func (api *StravaAPI) UpdateActivityDescription(activityID int64, athleteID int64, description string) error {
+	accessToken, err := api.GetAthleteAccessToken(athleteID)
+	if err != nil {
+		return err
+	}
+
+	limitType := api.RateLimit.IsRateLimitExceeded()
+	if limitType != RateLimitNone {
+		slog.Info("Rate limit exceeded", "limitType", limitType)
+		api.RateLimit.WaitForRateLimitReset(limitType)
+	}
+
+	ctx := context.WithValue(context.Background(), swagger.ContextAccessToken, accessToken)
+	opts := &swagger.ActivitiesApiUpdateActivityByIdOpts{
+		Body: optional.NewInterface(swagger.UpdatableActivity{Description: description}),
+	}
+	_, resp, err := api.apiClient.ActivitiesApi.UpdateActivityById(ctx, activityID, opts)
+	api.RateLimit.UpdateRateLimit(resp)
+	if err != nil {
+		return fmt.Errorf("failed to update activity description for ID %d: %w", activityID, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("update activity description returned status %d for ID %d", resp.StatusCode, activityID)
+	}
+	slog.Info("Updated activity description on Strava", "activityID", activityID, "description", description)
+	return nil
+}
+
 // GetDetailedActivityByID fetches detailed information for a specific activity by its ID.
 func (api *StravaAPI) GetDetailedActivityByID(activityID int64, athleteID int64) (*swagger.DetailedActivity, error) {
 	slog.Info("Fetching detailed activity info", "activityID", activityID)
