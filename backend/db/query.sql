@@ -69,6 +69,10 @@ ORDER BY start_date DESC;
 -- Computes the km of the route that don't come within 10m of any other route
 -- from the same user. Uses a point-sampling approach (one point per 20m) with
 -- geometry ST_DWithin so the GIST spatial index is used for each lookup.
+-- The result is capped at the route's own Strava-reported distance (in metres)
+-- so that a fully-unique route can never return a value larger than the route
+-- itself (PostGIS measures the raw GPS polyline, which is slightly longer than
+-- Strava's smoothed distance).
 WITH target AS (
     SELECT geom, user_id
     FROM route
@@ -106,5 +110,8 @@ segs AS (
     FROM pt_covered a
     JOIN pt_covered b ON b.n = a.n + 1
 )
-SELECT COALESCE(SUM(ST_Length(seg::geography)) FILTER (WHERE is_unique), 0) AS non_overlapping_km
+SELECT LEAST(
+    COALESCE(SUM(ST_Length(seg::geography)) FILTER (WHERE is_unique), 0),
+    (SELECT distance * 1000 FROM route WHERE route.id = $1)
+) AS non_overlapping_km
 FROM segs;

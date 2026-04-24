@@ -15,6 +15,10 @@ type Querier interface {
 	// Computes the km of the route that don't come within 10m of any other route
 	// from the same user. Uses a point-sampling approach (one point per 20m) with
 	// geometry ST_DWithin so the GIST spatial index is used for each lookup.
+	// The result is capped at the route's own Strava-reported distance (in metres)
+	// so that a fully-unique route can never return a value larger than the route
+	// itself (PostGIS measures the raw GPS polyline, which is slightly longer than
+	// Strava's smoothed distance).
 	GetRouteNonOverlappingKm(ctx context.Context, id int64) (interface{}, error)
 	ListAthleteIDs(ctx context.Context) ([]int64, error)
 	ListRoutesByUser(ctx context.Context, userID int64) ([]ListRoutesByUserRow, error)
