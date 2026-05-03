@@ -79,7 +79,7 @@ func main() {
 	stravaApi := strava.NewStravaAPI(db, cfg)
 	cacheUpdater := strava.NewCacheUpdater(db, cfg, stravaApi)
 
-	scope := "read,activity:read_all,profile:read_all"
+	scope := "read,activity:read_all,activity:write,profile:read_all"
 	goth.UseProviders(
 		gothstrava.New(cfg.StravaClientID, cfg.StravaClientSecret, cfg.RedirectURI, scope),
 	)
