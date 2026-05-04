@@ -326,14 +326,14 @@ func (s *Server) webhookCallbackChallenge(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) webhookCallbackUpdate(w http.ResponseWriter, r *http.Request) {
-	// Define the structure of the Strava webhook event, discaring unneeded field `updates`
 	var stravaEvent struct {
-		ObjectType     string `json:"object_type"`
-		ObjectID       int64  `json:"object_id"`
-		AspectType     string `json:"aspect_type"`
-		OwnerID        int64  `json:"owner_id"`
-		SubscriptionID int64  `json:"subscription_id"`
-		EventTime      int64  `json:"event_time"`
+		ObjectType     string            `json:"object_type"`
+		ObjectID       int64             `json:"object_id"`
+		AspectType     string            `json:"aspect_type"`
+		OwnerID        int64             `json:"owner_id"`
+		SubscriptionID int64             `json:"subscription_id"`
+		EventTime      int64             `json:"event_time"`
+		Updates        map[string]string `json:"updates"`
 	}
 
 	// Read the request body
@@ -351,6 +351,18 @@ func (s *Server) webhookCallbackUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if stravaEvent.AspectType == "update" || stravaEvent.AspectType == "create" {
+		// Skip description-only updates to avoid a webhook loop: when we write the
+		// non-overlapping description back to Strava, Strava fires another update
+		// event. Since we only care about route geometry and metadata, a
+		// description-only change has nothing meaningful to re-sync.
+		if stravaEvent.AspectType == "update" && len(stravaEvent.Updates) == 1 {
+			if _, onlyDescription := stravaEvent.Updates["description"]; onlyDescription {
+				slog.Info("Skipping description-only webhook update", "activityID", stravaEvent.ObjectID)
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		}
+
 		if err := s.cacheUpdater.AddDetailedActivity(stravaEvent.ObjectID, stravaEvent.OwnerID); err != nil {
 			slog.Error("Failed to process activity update/create", "activity_id", stravaEvent.ObjectID, "owner_id", stravaEvent.OwnerID, "error", err)
 			http.Error(w, "Failed to process activity", http.StatusInternalServerError)
