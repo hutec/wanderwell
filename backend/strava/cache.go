@@ -147,14 +147,13 @@ func (cu *CacheUpdater) AddDetailedActivity(activityID int64, athleteID int64) e
 	}
 	slog.Info("Upserted activity in cache", "activityID", activityID, "userID", athleteID)
 
-	cu.writeNonOverlappingDescription(activityID, athleteID)
 	return nil
 }
 
-// writeNonOverlappingDescription computes non-overlapping km for the activity and
+// WriteNonOverlappingDescription computes non-overlapping km for the activity and
 // writes it back to the Strava activity description. Only runs for the admin user.
 // Errors are logged but do not affect the sync result.
-func (cu *CacheUpdater) writeNonOverlappingDescription(activityID int64, athleteID int64) {
+func (cu *CacheUpdater) WriteNonOverlappingDescription(activityID int64, athleteID int64) {
 	if cu.cfg.AdminUserID == 0 || athleteID != cu.cfg.AdminUserID {
 		return
 	}
