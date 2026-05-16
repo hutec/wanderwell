@@ -164,13 +164,7 @@ func (cu *CacheUpdater) WriteUniqueDistanceDescription(activityID int64, athlete
 		return
 	}
 
-	metresFloat, ok := metres.(float64)
-	if !ok {
-		slog.Error("Unexpected type for unique distance result", "activityID", activityID, "type", fmt.Sprintf("%T", metres))
-		return
-	}
-
-	description := fmt.Sprintf("🧭 New ground: %.2f km", metresFloat/1000.0)
+	description := fmt.Sprintf("🧭 New ground: %.2f km", metres/1000.0)
 	if err := cu.stravaAPI.UpdateActivityDescription(activityID, athleteID, description); err != nil {
 		slog.Error("Failed to write unique distance description to Strava", "activityID", activityID, "error", err)
 	}

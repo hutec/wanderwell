@@ -113,5 +113,5 @@ segs AS (
 SELECT LEAST(
     COALESCE(SUM(ST_Length(seg::geography)) FILTER (WHERE is_unique), 0),
     (SELECT distance * 1000 FROM route WHERE route.id = $1)
-) AS unique_distance_meters
+)::double precision AS unique_distance_meters
 FROM segs;

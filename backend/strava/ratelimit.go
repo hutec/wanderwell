@@ -36,6 +36,9 @@ func NewRateLimit() *RateLimit {
 }
 
 func (rl *RateLimit) UpdateRateLimit(resp *http.Response) {
+	if resp == nil {
+		return
+	}
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 

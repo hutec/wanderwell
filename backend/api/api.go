@@ -316,13 +316,13 @@ func (s *Server) webhookCallbackChallenge(w http.ResponseWriter, r *http.Request
 
 func (s *Server) webhookCallbackUpdate(w http.ResponseWriter, r *http.Request) {
 	var stravaEvent struct {
-		ObjectType     string            `json:"object_type"`
-		ObjectID       int64             `json:"object_id"`
-		AspectType     string            `json:"aspect_type"`
-		OwnerID        int64             `json:"owner_id"`
-		SubscriptionID int64             `json:"subscription_id"`
-		EventTime      int64             `json:"event_time"`
-		Updates        map[string]string `json:"updates"`
+		ObjectType     string         `json:"object_type"`
+		ObjectID       int64          `json:"object_id"`
+		AspectType     string         `json:"aspect_type"`
+		OwnerID        int64          `json:"owner_id"`
+		SubscriptionID int64          `json:"subscription_id"`
+		EventTime      int64          `json:"event_time"`
+		Updates        map[string]any `json:"updates"`
 	}
 
 	// Read the request body
@@ -359,7 +359,7 @@ func (s *Server) webhookCallbackUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if stravaEvent.AspectType == "create" {
-			s.cacheUpdater.WriteUniqueDistanceDescription(stravaEvent.ObjectID, stravaEvent.OwnerID)
+			go s.cacheUpdater.WriteUniqueDistanceDescription(stravaEvent.ObjectID, stravaEvent.OwnerID)
 		}
 		// Respond to Strava first to avoid webhook retries, then purge cache asynchronously.
 		w.WriteHeader(http.StatusOK)

@@ -19,7 +19,7 @@ type Querier interface {
 	// so that a fully-unique route can never return a value larger than the route
 	// itself (PostGIS measures the raw GPS polyline, which is slightly longer than
 	// Strava's smoothed distance).
-	GetRouteUniqueDistanceMeters(ctx context.Context, id int64) (interface{}, error)
+	GetRouteUniqueDistanceMeters(ctx context.Context, id int64) (float64, error)
 	ListAthleteIDs(ctx context.Context) ([]int64, error)
 	ListRoutesByUser(ctx context.Context, userID int64) ([]ListRoutesByUserRow, error)
 	RouteExists(ctx context.Context, id int64) (bool, error)
