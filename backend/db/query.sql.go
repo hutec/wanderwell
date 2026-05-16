@@ -114,7 +114,7 @@ segs AS (
 SELECT LEAST(
     COALESCE(SUM(ST_Length(seg::geography)) FILTER (WHERE is_unique), 0),
     (SELECT distance * 1000 FROM route WHERE route.id = $1)
-) AS unique_distance_meters
+)::double precision AS unique_distance_meters
 FROM segs
 `
 
@@ -125,9 +125,9 @@ FROM segs
 // so that a fully-unique route can never return a value larger than the route
 // itself (PostGIS measures the raw GPS polyline, which is slightly longer than
 // Strava's smoothed distance).
-func (q *Queries) GetRouteUniqueDistanceMeters(ctx context.Context, id int64) (interface{}, error) {
+func (q *Queries) GetRouteUniqueDistanceMeters(ctx context.Context, id int64) (float64, error) {
 	row := q.db.QueryRow(ctx, getRouteUniqueDistanceMeters, id)
-	var unique_distance_meters interface{}
+	var unique_distance_meters float64
 	err := row.Scan(&unique_distance_meters)
 	return unique_distance_meters, err
 }
