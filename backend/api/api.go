@@ -359,7 +359,7 @@ func (s *Server) webhookCallbackUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if stravaEvent.AspectType == "create" {
-			s.cacheUpdater.WriteNonOverlappingDescription(stravaEvent.ObjectID, stravaEvent.OwnerID)
+			s.cacheUpdater.WriteUniqueDistanceDescription(stravaEvent.ObjectID, stravaEvent.OwnerID)
 		}
 		// Respond to Strava first to avoid webhook retries, then purge cache asynchronously.
 		w.WriteHeader(http.StatusOK)

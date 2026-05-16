@@ -65,8 +65,8 @@ FROM route
 WHERE user_id = $1
 ORDER BY start_date DESC;
 
--- name: GetRouteNonOverlappingKm :one
--- Computes the km of the route that don't come within 10m of any other route
+-- name: GetRouteUniqueDistanceMeters :one
+-- Computes the meters of the route that don't come within 10m of any other route
 -- from the same user. Uses a point-sampling approach (one point per 20m) with
 -- geometry ST_DWithin so the GIST spatial index is used for each lookup.
 -- The result is capped at the route's own Strava-reported distance (in metres)
@@ -113,5 +113,5 @@ segs AS (
 SELECT LEAST(
     COALESCE(SUM(ST_Length(seg::geography)) FILTER (WHERE is_unique), 0),
     (SELECT distance * 1000 FROM route WHERE route.id = $1)
-) AS non_overlapping_km
+) AS unique_distance_meters
 FROM segs;

@@ -150,29 +150,29 @@ func (cu *CacheUpdater) AddDetailedActivity(activityID int64, athleteID int64) e
 	return nil
 }
 
-// WriteNonOverlappingDescription computes non-overlapping km for the activity and
+// WriteUniqueDistanceDescription computes the unique distance for the activity and
 // writes it back to the Strava activity description. Only runs for the admin user.
 // Errors are logged but do not affect the sync result.
-func (cu *CacheUpdater) WriteNonOverlappingDescription(activityID int64, athleteID int64) {
+func (cu *CacheUpdater) WriteUniqueDistanceDescription(activityID int64, athleteID int64) {
 	if cu.cfg.AdminUserID == 0 || athleteID != cu.cfg.AdminUserID {
 		return
 	}
 
-	metres, err := cu.queries.GetRouteNonOverlappingKm(context.Background(), activityID)
+	metres, err := cu.queries.GetRouteUniqueDistanceMeters(context.Background(), activityID)
 	if err != nil {
-		slog.Error("Failed to compute non-overlapping km", "activityID", activityID, "error", err)
+		slog.Error("Failed to compute unique distance", "activityID", activityID, "error", err)
 		return
 	}
 
 	metresFloat, ok := metres.(float64)
 	if !ok {
-		slog.Error("Unexpected type for non-overlapping km result", "activityID", activityID, "type", fmt.Sprintf("%T", metres))
+		slog.Error("Unexpected type for unique distance result", "activityID", activityID, "type", fmt.Sprintf("%T", metres))
 		return
 	}
 
 	description := fmt.Sprintf("🧭 New ground: %.2f km", metresFloat/1000.0)
 	if err := cu.stravaAPI.UpdateActivityDescription(activityID, athleteID, description); err != nil {
-		slog.Error("Failed to write non-overlapping description to Strava", "activityID", activityID, "error", err)
+		slog.Error("Failed to write unique distance description to Strava", "activityID", activityID, "error", err)
 	}
 }
 
