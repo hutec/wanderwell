@@ -133,7 +133,6 @@ func (s *Server) setupRoutes() {
 		r.Get("/auth/tiles", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		})
-		r.Get("/routes/{routeID}/non_overlapping_km", s.getRouteNonOverlappingKm)
 	})
 
 	// Admin-only routes - require authentication and admin privileges
@@ -176,16 +175,6 @@ func (s *Server) purgeTileCache(userID int64) {
 	}
 	defer resp.Body.Close()
 	slog.Info("Tile cache ban sent", "userID", userID, "status", resp.Status)
-}
-
-func parseRouteID(r *http.Request) (int64, error) {
-	routeIDParam := chi.URLParam(r, "routeID")
-	var routeID int64
-	_, err := fmt.Sscan(routeIDParam, &routeID)
-	if err != nil {
-		return 0, fmt.Errorf("invalid route ID: %w", err)
-	}
-	return routeID, nil
 }
 
 func (s *Server) getCurrentUser(w http.ResponseWriter, r *http.Request) {
@@ -411,44 +400,4 @@ func listRoutesByUser(q *db.Queries, userID int64) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(routes)
 	}
-}
-
-func (s *Server) getRouteNonOverlappingKm(w http.ResponseWriter, r *http.Request) {
-	slog.Info("Received request for non-overlapping distance", "path", r.URL.Path)
-	userID, ok := r.Context().Value(userIDKey).(int64)
-	if !ok {
-		http.Error(w, "user_id not found in context", http.StatusUnauthorized)
-		return
-	}
-
-	routeID, err := parseRouteID(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	routeName, err := s.queries.GetRouteName(r.Context(), db.GetRouteNameParams{
-		ID:     routeID,
-		UserID: userID,
-	})
-	if err != nil {
-		http.Error(w, "Route not found", http.StatusNotFound)
-		return
-	}
-
-	slog.Info("Computing non-overlapping distance", "route_id", routeID, "route_name", routeName, "user_id", userID)
-
-	km, err := s.queries.GetRouteNonOverlappingKm(r.Context(), routeID)
-	if err != nil {
-		slog.Error("error", err)
-		http.Error(w, "Failed to compute non-overlapping distance", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
-		"route_id":           routeID,
-		"route_name":         routeName,
-		"non_overlapping_km": km,
-	})
 }
