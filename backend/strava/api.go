@@ -133,8 +133,11 @@ func (api *StravaAPI) GetAthleteSummaryActivitiesByPage(athleteID int64, page in
 		slog.Error("Failed to get activities", "error", err)
 		return nil, fmt.Errorf("failed to get activities for page %d: %w", page, err)
 	}
-	if resp == nil || resp.StatusCode != http.StatusOK {
-		slog.Error("Failed to get activities", "error", err)
+	if resp == nil {
+		return nil, fmt.Errorf("no response from Strava for activities page %d", page)
+	}
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("Failed to get activities", "status", resp.StatusCode)
 		return nil, fmt.Errorf("API request failed with status: %d", resp.StatusCode)
 	}
 
@@ -164,7 +167,10 @@ func (api *StravaAPI) UpdateActivityDescription(activityID int64, athleteID int6
 	if err != nil {
 		return fmt.Errorf("failed to update activity description for ID %d: %w", activityID, err)
 	}
-	if resp == nil || resp.StatusCode != http.StatusOK {
+	if resp == nil {
+		return fmt.Errorf("no response from Strava for activity ID %d", activityID)
+	}
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("update activity description returned status %d for ID %d", resp.StatusCode, activityID)
 	}
 	slog.Info("Updated activity description on Strava", "activityID", activityID, "description", description)
@@ -199,8 +205,11 @@ func (api *StravaAPI) GetDetailedActivityByID(activityID int64, athleteID int64)
 		slog.Error("Failed to get detailed activity", "activityID", activityID, "error", err)
 		return nil, fmt.Errorf("failed to get detailed activity for ID %d: %w", activityID, err)
 	}
-	if resp == nil || resp.StatusCode != http.StatusOK {
-		slog.Error("Failed to get detailed activity", "error", err)
+	if resp == nil {
+		return nil, fmt.Errorf("no response from Strava for detailed activity ID %d", activityID)
+	}
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("Failed to get detailed activity", "activityID", activityID, "status", resp.StatusCode)
 		return nil, fmt.Errorf("API request for detailed activity failed with status: %d", resp.StatusCode)
 	}
 
