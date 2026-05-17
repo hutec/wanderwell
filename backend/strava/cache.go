@@ -154,7 +154,12 @@ func (cu *CacheUpdater) AddDetailedActivity(activityID int64, athleteID int64) e
 // writes it back to the Strava activity description. Only runs for the admin user.
 // Errors are logged but do not affect the sync result.
 func (cu *CacheUpdater) WriteUniqueDistanceDescription(activityID int64, athleteID int64) {
-	if cu.cfg.AdminUserID == 0 || athleteID != cu.cfg.AdminUserID {
+	writeUniqueDistance, err := cu.queries.GetWriteUniqueDistancePreference(context.Background(), athleteID)
+	if err != nil {
+		slog.Error("Failed to get write unique distance preference", "athleteID", athleteID, "error", err)
+		return
+	}
+	if !writeUniqueDistance {
 		return
 	}
 
