@@ -20,7 +20,7 @@ type Querier interface {
 	// itself (PostGIS measures the raw GPS polyline, which is slightly longer than
 	// Strava's smoothed distance).
 	GetRouteUniqueDistanceMeters(ctx context.Context, id int64) (float64, error)
-	GetWriteUniqueDistancePreference(ctx context.Context, userID int64) (bool, error)
+	GetUserPreferences(ctx context.Context, userID int64) (UserPreference, error)
 	ListAthleteIDs(ctx context.Context) ([]int64, error)
 	ListRoutesByUser(ctx context.Context, userID int64) ([]ListRoutesByUserRow, error)
 	RouteExists(ctx context.Context, id int64) (bool, error)
@@ -28,6 +28,7 @@ type Querier interface {
 	UpdateRouteName(ctx context.Context, arg UpdateRouteNameParams) error
 	UpsertAthlete(ctx context.Context, arg UpsertAthleteParams) error
 	UpsertRoute(ctx context.Context, arg UpsertRouteParams) error
+	UpsertUserPreferences(ctx context.Context, arg UpsertUserPreferencesParams) (UserPreference, error)
 }
 
 var _ Querier = (*Queries)(nil)

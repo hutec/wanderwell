@@ -132,22 +132,17 @@ func (q *Queries) GetRouteUniqueDistanceMeters(ctx context.Context, id int64) (f
 	return unique_distance_meters, err
 }
 
-const getWriteUniqueDistancePreference = `-- name: GetWriteUniqueDistancePreference :one
-SELECT COALESCE(
-    (
-        SELECT write_unique_distance
-        FROM user_preferences
-        WHERE user_id = $1
-    ),
-    FALSE
-)::boolean AS write_unique_distance
+const getUserPreferences = `-- name: GetUserPreferences :one
+SELECT user_id, write_unique_distance
+FROM user_preferences
+WHERE user_id = $1
 `
 
-func (q *Queries) GetWriteUniqueDistancePreference(ctx context.Context, userID int64) (bool, error) {
-	row := q.db.QueryRow(ctx, getWriteUniqueDistancePreference, userID)
-	var write_unique_distance bool
-	err := row.Scan(&write_unique_distance)
-	return write_unique_distance, err
+func (q *Queries) GetUserPreferences(ctx context.Context, userID int64) (UserPreference, error) {
+	row := q.db.QueryRow(ctx, getUserPreferences, userID)
+	var i UserPreference
+	err := row.Scan(&i.UserID, &i.WriteUniqueDistance)
+	return i, err
 }
 
 const listAthleteIDs = `-- name: ListAthleteIDs :many
@@ -351,4 +346,24 @@ func (q *Queries) UpsertRoute(ctx context.Context, arg UpsertRouteParams) error 
 		arg.StGeomfromtext,
 	)
 	return err
+}
+
+const upsertUserPreferences = `-- name: UpsertUserPreferences :one
+INSERT INTO user_preferences (user_id, write_unique_distance)
+VALUES ($1, $2)
+ON CONFLICT (user_id) DO UPDATE SET
+    write_unique_distance = EXCLUDED.write_unique_distance
+RETURNING user_id, write_unique_distance
+`
+
+type UpsertUserPreferencesParams struct {
+	UserID              int64 `json:"user_id"`
+	WriteUniqueDistance bool  `json:"write_unique_distance"`
+}
+
+func (q *Queries) UpsertUserPreferences(ctx context.Context, arg UpsertUserPreferencesParams) (UserPreference, error) {
+	row := q.db.QueryRow(ctx, upsertUserPreferences, arg.UserID, arg.WriteUniqueDistance)
+	var i UserPreference
+	err := row.Scan(&i.UserID, &i.WriteUniqueDistance)
+	return i, err
 }
