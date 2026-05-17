@@ -132,6 +132,24 @@ func (q *Queries) GetRouteUniqueDistanceMeters(ctx context.Context, id int64) (f
 	return unique_distance_meters, err
 }
 
+const getWriteUniqueDistancePreference = `-- name: GetWriteUniqueDistancePreference :one
+SELECT COALESCE(
+    (
+        SELECT write_unique_distance
+        FROM user_preferences
+        WHERE user_id = $1
+    ),
+    FALSE
+)::boolean AS write_unique_distance
+`
+
+func (q *Queries) GetWriteUniqueDistancePreference(ctx context.Context, userID int64) (bool, error) {
+	row := q.db.QueryRow(ctx, getWriteUniqueDistancePreference, userID)
+	var write_unique_distance bool
+	err := row.Scan(&write_unique_distance)
+	return write_unique_distance, err
+}
+
 const listAthleteIDs = `-- name: ListAthleteIDs :many
 SELECT id
 FROM athlete

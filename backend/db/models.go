@@ -31,3 +31,8 @@ type Route struct {
 	SportType    pgtype.Text        `json:"sport_type"`
 	Geom         string             `json:"geom"`
 }
+
+type UserPreference struct {
+	UserID              int64 `json:"user_id"`
+	WriteUniqueDistance bool  `json:"write_unique_distance"`
+}

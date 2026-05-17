@@ -28,6 +28,16 @@ WHERE id = $1;
 SELECT id
 FROM athlete;
 
+-- name: GetWriteUniqueDistancePreference :one
+SELECT COALESCE(
+    (
+        SELECT write_unique_distance
+        FROM user_preferences
+        WHERE user_id = $1
+    ),
+    FALSE
+)::boolean AS write_unique_distance;
+
 -- name: RouteExists :one
 SELECT COUNT(*) > 0
 FROM route

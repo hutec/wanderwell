@@ -25,6 +25,12 @@ CREATE TABLE IF NOT EXISTS route (
     FOREIGN KEY (user_id) REFERENCES athlete(id)
 );
 
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id BIGINT PRIMARY KEY,
+    write_unique_distance BOOLEAN NOT NULL DEFAULT FALSE,
+    FOREIGN KEY (user_id) REFERENCES athlete(id)
+);
+
 -- Create spatial index
 CREATE INDEX IF NOT EXISTS route_geom_idx ON route USING GIST (geom);
 CREATE INDEX IF NOT EXISTS route_user_id_id_idx ON route (user_id, id);
