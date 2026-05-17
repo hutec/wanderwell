@@ -151,7 +151,7 @@ func (cu *CacheUpdater) AddDetailedActivity(activityID int64, athleteID int64) e
 }
 
 // WriteUniqueDistanceDescription computes the unique distance for the activity and
-// writes it back to the Strava activity description. Only runs for the admin user.
+// writes it back to the Strava activity description if the user has enabled the preference to do so.
 // Errors are logged but do not affect the sync result.
 func (cu *CacheUpdater) WriteUniqueDistanceDescription(activityID int64, athleteID int64) {
 	writeUniqueDistance, err := cu.queries.GetWriteUniqueDistancePreference(context.Background(), athleteID)
