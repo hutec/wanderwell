@@ -31,6 +31,30 @@ CREATE TABLE IF NOT EXISTS user_preferences (
     FOREIGN KEY (user_id) REFERENCES athlete(id)
 );
 
+-- Backfill user_preferences for existing athletes
+INSERT INTO user_preferences (user_id)
+SELECT id
+FROM athlete
+ON CONFLICT (user_id) DO NOTHING;
+
+-- Ensure user_preferences entry exists for new athletes
+CREATE OR REPLACE FUNCTION ensure_user_preferences()
+RETURNS trigger AS $$
+BEGIN
+    INSERT INTO user_preferences (user_id)
+    VALUES (NEW.id)
+    ON CONFLICT (user_id) DO NOTHING;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger to call the function after inserting a new athlete
+DROP TRIGGER IF EXISTS athlete_user_preferences_defaults ON athlete;
+CREATE TRIGGER athlete_user_preferences_defaults
+AFTER INSERT ON athlete
+FOR EACH ROW
+EXECUTE FUNCTION ensure_user_preferences();
+
 -- Create spatial index
 CREATE INDEX IF NOT EXISTS route_geom_idx ON route USING GIST (geom);
 CREATE INDEX IF NOT EXISTS route_user_id_id_idx ON route (user_id, id);

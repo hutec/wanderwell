@@ -127,6 +127,8 @@ func (s *Server) setupRoutes() {
 	s.router.Group(func(r chi.Router) {
 		r.Use(s.RequireAuth)
 		r.Get("/me", s.getCurrentUser)
+		r.Get("/preferences", s.getUserPreferences)
+		r.Put("/preferences", s.updateUserPreferences)
 		r.Get("/route_details", s.listRoutesWithoutRouteData)
 		// Dummy endpoint to allow Traefik to verify authentication for tile
 		// requests without needing to duplicate auth logic in the tile service.
@@ -202,6 +204,61 @@ func (s *Server) listRoutesWithoutRouteData(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	listRoutesByUser(s.queries, userID)(w, r)
+}
+
+func (s *Server) getUserPreferences(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(userIDKey).(int64)
+	if !ok {
+		http.Error(w, "user_id not found in context", http.StatusBadRequest)
+		return
+	}
+
+	preferences, err := s.queries.GetUserPreferences(r.Context(), userID)
+	if err != nil {
+		slog.Error("Failed to fetch user preferences", "userID", userID, "error", err)
+		http.Error(w, "Failed to fetch user preferences", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(preferences)
+}
+
+func (s *Server) updateUserPreferences(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(userIDKey).(int64)
+	if !ok {
+		http.Error(w, "user_id not found in context", http.StatusBadRequest)
+		return
+	}
+
+	var request struct {
+		WriteUniqueDistance *bool `json:"write_unique_distance"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		slog.Error("Failed to decode user preferences update", "userID", userID, "error", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if request.WriteUniqueDistance == nil {
+		http.Error(w, "write_unique_distance is required", http.StatusBadRequest)
+		return
+	}
+
+	preferences, err := s.queries.UpsertUserPreferences(r.Context(), db.UpsertUserPreferencesParams{
+		UserID:              userID,
+		WriteUniqueDistance: *request.WriteUniqueDistance,
+	})
+	if err != nil {
+		slog.Error("Failed to update user preferences", "userID", userID, "error", err)
+		http.Error(w, "Failed to update user preferences", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(preferences)
 }
 
 func (s *Server) updateCacheForUser(w http.ResponseWriter, r *http.Request) {

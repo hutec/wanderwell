@@ -154,12 +154,12 @@ func (cu *CacheUpdater) AddDetailedActivity(activityID int64, athleteID int64) e
 // writes it back to the Strava activity description if the user has enabled the preference to do so.
 // Errors are logged but do not affect the sync result.
 func (cu *CacheUpdater) WriteUniqueDistanceDescription(activityID int64, athleteID int64) {
-	writeUniqueDistance, err := cu.queries.GetWriteUniqueDistancePreference(context.Background(), athleteID)
+	preferences, err := cu.queries.GetUserPreferences(context.Background(), athleteID)
 	if err != nil {
-		slog.Error("Failed to get write unique distance preference", "athleteID", athleteID, "error", err)
+		slog.Error("Failed to get user preferences", "athleteID", athleteID, "error", err)
 		return
 	}
-	if !writeUniqueDistance {
+	if !preferences.WriteUniqueDistance {
 		return
 	}
 
