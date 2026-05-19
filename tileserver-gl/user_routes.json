@@ -1,0 +1,26 @@
+{
+  "name": "75930344",
+  "version": 8,
+  "sources": {
+    "source1": { "url": "mbtiles://user_routes.mbtiles", "type": "vector" }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "line",
+      "source": "source1",
+      "source-layer": "route",
+      "paint": {
+        "line-color": "#f9c004",
+        "line-width": {
+          "base": 1.4,
+          "stops": [
+            [8, 0.8],
+            [20, 15]
+          ]
+        }
+      },
+      "interactive": true
+    }
+  ]
+}
