@@ -61,7 +61,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  overlay-tilerserver:
+  overlay-tileserver:
     image: maptiler/tileserver-gl:v5.5.0
     command: "-p 4545 -c config.json"
     volumes:
