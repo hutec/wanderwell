@@ -163,6 +163,19 @@ func (cu *CacheUpdater) WriteUniqueDistanceDescription(activityID int64, athlete
 		return
 	}
 
+	// We want to skip activities/routes that don't have a map.
+	// AddDetailedActivity should have skipped those and not added them to the database,
+	// so if the route is missing, we can assume it doesn't have a map and skip the unique distance description.
+	routeExists, err := cu.queries.RouteExists(context.Background(), activityID)
+	if err != nil {
+		slog.Error("Failed to check route existence before writing description", "activityID", activityID, "error", err)
+		return
+	}
+	if !routeExists {
+		slog.Info("Skipping unique distance description because route is missing in database.", "activityID", activityID)
+		return
+	}
+
 	metres, err := cu.queries.GetRouteUniqueDistanceMeters(context.Background(), activityID)
 	if err != nil {
 		slog.Error("Failed to compute unique distance", "activityID", activityID, "error", err)
