@@ -172,7 +172,7 @@ func (cu *CacheUpdater) WriteUniqueDistanceDescription(activityID int64, athlete
 		return
 	}
 	if !routeExists {
-		slog.Info("Skipping unique distance description because route is missing in database.", "activityID", activityID)
+		slog.Info("Skipping unique distance description because route is missing in database", "activityID", activityID)
 		return
 	}
 
