@@ -77,6 +77,46 @@ FROM route
 WHERE user_id = $1
 ORDER BY start_date DESC;
 
+-- name: ListExplorerCoveredSubtiles :many
+WITH params AS (
+    SELECT
+        sqlc.arg(user_id)::bigint AS user_id,
+        sqlc.arg(z)::integer AS z,
+        sqlc.arg(x)::integer AS x,
+        sqlc.arg(y)::integer AS y,
+        (1 << (14 - sqlc.arg(z)::integer))::integer AS scale
+),
+parent_tile AS (
+    SELECT ST_Transform(ST_TileEnvelope(p.z, p.x, p.y), 4326) AS geom
+    FROM params p
+),
+candidate_routes AS (
+    SELECT route.geom
+    FROM route, params p, parent_tile pt
+    WHERE route.user_id = p.user_id
+      AND route.geom IS NOT NULL
+      AND route.geom && pt.geom
+      AND ST_Intersects(route.geom, pt.geom)
+),
+subtiles AS (
+    SELECT
+        child_x - (p.x * p.scale) AS local_x,
+        child_y - (p.y * p.scale) AS local_y,
+        ST_Transform(ST_TileEnvelope(14, child_x, child_y), 4326) AS geom
+    FROM params p
+    CROSS JOIN generate_series(p.x * p.scale, ((p.x + 1) * p.scale) - 1) AS child_x
+    CROSS JOIN generate_series(p.y * p.scale, ((p.y + 1) * p.scale) - 1) AS child_y
+)
+SELECT subtiles.local_x, subtiles.local_y
+FROM subtiles
+WHERE EXISTS (
+    SELECT 1
+    FROM candidate_routes
+    WHERE candidate_routes.geom && subtiles.geom
+      AND ST_Intersects(candidate_routes.geom, subtiles.geom)
+)
+ORDER BY subtiles.local_y, subtiles.local_x;
+
 -- name: GetRouteUniqueDistanceMeters :one
 -- Computes the meters of the route that don't come within 10m of any other route
 -- from the same user. Uses a point-sampling approach (one point per 20m) with

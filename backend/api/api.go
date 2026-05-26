@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 	"wanderwell/backend/db"
 	"wanderwell/backend/strava"
@@ -119,7 +120,7 @@ func (s *Server) setupRoutes() {
 	// to avoid log noise and disk usage.
 	s.router.Use(httplog.RequestLogger(slog.Default(), &httplog.Options{
 		Skip: func(req *http.Request, _ int) bool {
-			return req.URL.Path == "/auth/tiles"
+			return req.URL.Path == "/auth/tiles" || strings.HasPrefix(req.URL.Path, "/explorer/")
 		},
 	}))
 
@@ -145,6 +146,7 @@ func (s *Server) setupRoutes() {
 	})
 
 	// Public routes
+	s.router.Get("/explorer/{z}/{x}/{y}.png", s.getExplorerTile)
 	s.router.Get("/start", s.initiateAuthentication)
 	s.router.Get("/user_token_exchange", s.tokenExchange)
 	s.router.Get("/webhook", s.webhookCallbackChallenge)

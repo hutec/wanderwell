@@ -22,6 +22,7 @@ type Querier interface {
 	GetRouteUniqueDistanceMeters(ctx context.Context, id int64) (float64, error)
 	GetUserPreferences(ctx context.Context, userID int64) (UserPreference, error)
 	ListAthleteIDs(ctx context.Context) ([]int64, error)
+	ListExplorerCoveredSubtiles(ctx context.Context, arg ListExplorerCoveredSubtilesParams) ([]ListExplorerCoveredSubtilesRow, error)
 	ListRoutesByUser(ctx context.Context, userID int64) ([]ListRoutesByUserRow, error)
 	RouteExists(ctx context.Context, id int64) (bool, error)
 	UpdateAthleteTokens(ctx context.Context, arg UpdateAthleteTokensParams) error

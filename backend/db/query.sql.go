@@ -170,6 +170,84 @@ func (q *Queries) ListAthleteIDs(ctx context.Context) ([]int64, error) {
 	return items, nil
 }
 
+const listExplorerCoveredSubtiles = `-- name: ListExplorerCoveredSubtiles :many
+WITH params AS (
+    SELECT
+        $1::bigint AS user_id,
+        $2::integer AS z,
+        $3::integer AS x,
+        $4::integer AS y,
+        (1 << (14 - $2::integer))::integer AS scale
+),
+parent_tile AS (
+    SELECT ST_Transform(ST_TileEnvelope(p.z, p.x, p.y), 4326) AS geom
+    FROM params p
+),
+candidate_routes AS (
+    SELECT route.geom
+    FROM route, params p, parent_tile pt
+    WHERE route.user_id = p.user_id
+      AND route.geom IS NOT NULL
+      AND route.geom && pt.geom
+      AND ST_Intersects(route.geom, pt.geom)
+),
+subtiles AS (
+    SELECT
+        child_x - (p.x * p.scale) AS local_x,
+        child_y - (p.y * p.scale) AS local_y,
+        ST_Transform(ST_TileEnvelope(14, child_x, child_y), 4326) AS geom
+    FROM params p
+    CROSS JOIN generate_series(p.x * p.scale, ((p.x + 1) * p.scale) - 1) AS child_x
+    CROSS JOIN generate_series(p.y * p.scale, ((p.y + 1) * p.scale) - 1) AS child_y
+)
+SELECT subtiles.local_x, subtiles.local_y
+FROM subtiles
+WHERE EXISTS (
+    SELECT 1
+    FROM candidate_routes
+    WHERE candidate_routes.geom && subtiles.geom
+      AND ST_Intersects(candidate_routes.geom, subtiles.geom)
+)
+ORDER BY subtiles.local_y, subtiles.local_x
+`
+
+type ListExplorerCoveredSubtilesParams struct {
+	UserID int64 `json:"user_id"`
+	Z      int32 `json:"z"`
+	X      int32 `json:"x"`
+	Y      int32 `json:"y"`
+}
+
+type ListExplorerCoveredSubtilesRow struct {
+	LocalX int32 `json:"local_x"`
+	LocalY int32 `json:"local_y"`
+}
+
+func (q *Queries) ListExplorerCoveredSubtiles(ctx context.Context, arg ListExplorerCoveredSubtilesParams) ([]ListExplorerCoveredSubtilesRow, error) {
+	rows, err := q.db.Query(ctx, listExplorerCoveredSubtiles,
+		arg.UserID,
+		arg.Z,
+		arg.X,
+		arg.Y,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExplorerCoveredSubtilesRow
+	for rows.Next() {
+		var i ListExplorerCoveredSubtilesRow
+		if err := rows.Scan(&i.LocalX, &i.LocalY); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRoutesByUser = `-- name: ListRoutesByUser :many
 SELECT id, user_id, start_date, name, elapsed_time, moving_time, distance, average_speed, elevation, bounds
 FROM route
