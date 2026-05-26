@@ -68,6 +68,7 @@ services:
     volumes:
       - ./varnish/default.vcl:/etc/varnish/default.vcl:ro
     depends_on:
+      - backend
       - tileserver
     restart: unless-stopped
 
