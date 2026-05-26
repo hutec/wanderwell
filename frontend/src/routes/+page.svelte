@@ -79,6 +79,15 @@
 		if (!map) return;
 
 		let popup: maplibregl.Popup | null = null;
+		const mapCanvas = map.getCanvas();
+
+		const preventMapSelection = (event: KeyboardEvent) => {
+			if (event.altKey || event.ctrlKey || event.metaKey || !event.shiftKey) return;
+			if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+
+			// MapLibre handles the camera change, but does not suppress the browser's text selection.
+			event.preventDefault();
+		};
 
 		const handleRouteClick = (
 			e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }
@@ -126,6 +135,7 @@
 		map.on('mouseleave', 'RouteHitArea', resetCursor);
 		map.on('mouseenter', 'Route', setCursorPointer);
 		map.on('mouseleave', 'Route', resetCursor);
+		mapCanvas.addEventListener('keydown', preventMapSelection);
 
 		return () => {
 			map!.off('click', 'RouteHitArea', handleRouteClick);
@@ -133,6 +143,7 @@
 			map!.off('mouseleave', 'RouteHitArea', resetCursor);
 			map!.off('mouseenter', 'Route', setCursorPointer);
 			map!.off('mouseleave', 'Route', resetCursor);
+			mapCanvas.removeEventListener('keydown', preventMapSelection);
 			popup?.remove();
 		};
 	});
