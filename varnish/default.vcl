@@ -5,6 +5,11 @@ backend default {
     .port = "3000";
 }
 
+backend api {
+    .host = "backend";
+    .port = "3000";
+}
+
 # Allow BAN requests from localhost and all private (Docker) network ranges
 acl purge_acl {
     "127.0.0.1";
@@ -29,6 +34,10 @@ sub vcl_recv {
 
     if (req.method != "GET" && req.method != "HEAD") {
         return(pass);
+    }
+
+    if (req.url ~ "^/explorer/") {
+        set req.backend_hint = api;
     }
 
     return(hash);
