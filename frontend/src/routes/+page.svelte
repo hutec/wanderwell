@@ -81,6 +81,7 @@
 		let popup: maplibregl.Popup | null = null;
 		const mapCanvas = map.getCanvas();
 
+		// Prevent unintended sidebar text selection when shift + arrow keys are used for map navigation
 		const preventMapSelection = (event: KeyboardEvent) => {
 			if (event.altKey || event.ctrlKey || event.metaKey || !event.shiftKey) return;
 			if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
