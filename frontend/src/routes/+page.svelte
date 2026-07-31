@@ -17,6 +17,9 @@
 	import maplibregl from 'maplibre-gl';
 	const { LngLatBounds } = maplibregl;
 
+	// Color used to draw the selected routes beneath all routes in compare mode.
+	const SELECTED_ROUTE_COLOR = 'rgba(37, 99, 235, 1)';
+
 	$effect(() => {
 		checkAuth();
 	});
@@ -61,11 +64,32 @@
 					// Show selected only
 					layer.filter = ['all', ['in', 'id', ...selectedIds]];
 				} else {
-					// Hide selected — show everything except selected
+					// Compare — draw all other routes on top so only the
+					// non-overlapping parts of the selected routes remain visible
+					// below them (added as SelectedRoute layer further down).
 					layer.filter = ['all', ['!in', 'id', ...selectedIds]];
 					if (layerId === 'RouteArrows') {
 						layer.layout = { ...layer.layout, visibility: 'none' };
 					}
+				}
+			}
+
+			// In compare mode, add the selected routes in a distinct color beneath
+			// the regular Route layer so their unique (non-overlapping) segments show.
+			if (selectedIds.length > 0 && !routesState.selectedRoutesVisible) {
+				const routeLayer = style.layers.find((l: { id: string }) => l.id === 'Route');
+				const routeIndex = style.layers.findIndex((l: { id: string }) => l.id === 'Route');
+
+				if (routeLayer && routeIndex !== -1) {
+					const selectedLayer = JSON.parse(JSON.stringify(routeLayer));
+					selectedLayer.id = 'SelectedRoute';
+					selectedLayer.filter = ['all', ['in', 'id', ...selectedIds]];
+					selectedLayer.paint = {
+						...selectedLayer.paint,
+						'line-color': SELECTED_ROUTE_COLOR
+					};
+					// Insert directly below the Route layer.
+					style.layers.splice(routeIndex, 0, selectedLayer);
 				}
 			}
 		}
@@ -285,7 +309,7 @@
 								bind:group={routesState.selectedRoutesVisible}
 								value={false}
 							/>
-							Hide selected
+							Compare
 						</label>
 					</div>
 				</div>
