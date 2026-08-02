@@ -1,0 +1,19 @@
+{
+  "data": {
+    "routes": {
+      "mbtiles": "user_routes.mbtiles"
+    }
+  },
+  "options": {
+    "paths": {
+      "mbtiles": "/data",
+      "root": "",
+      "styles": "/data"
+    }
+  },
+  "styles": {
+    "user_routes": {
+      "style": "user_routes.json"
+    }
+  }
+}
