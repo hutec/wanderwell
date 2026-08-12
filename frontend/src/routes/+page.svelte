@@ -8,7 +8,7 @@
 	import RoutePopupContent from '$lib/RoutePopupContent.svelte';
 	import type { Route } from '$lib/types/route';
 
-	import { MapLibre, NavigationControl } from 'svelte-maplibre-gl';
+	import { MapLibre, NavigationControl, GeolocateControl } from 'svelte-maplibre-gl';
 	import type {
 		StyleSpecification,
 		Map as MapLibreMap,
@@ -342,7 +342,18 @@
 	<main class="min-h-0 flex-1">
 		{#if activeMapStyle}
 			<MapLibre class="h-full w-full" style={activeMapStyle} bind:map>
-				<NavigationControl position="top-right" visualizePitch={false} showCompass={true} showZoom={false}/>
+				<NavigationControl
+					position="top-right"
+					visualizePitch={false}
+					showCompass={true}
+					showZoom={false}
+				/>
+				<GeolocateControl
+					position="top-right"
+					positionOptions={{ enableHighAccuracy: true }}
+					trackUserLocation={true}
+					showUserLocation={true}
+				/>
 			</MapLibre>
 		{:else}
 			<div class="flex h-full w-full items-center justify-center bg-slate-200">
