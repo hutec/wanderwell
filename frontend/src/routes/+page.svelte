@@ -8,7 +8,7 @@
 	import RoutePopupContent from '$lib/RoutePopupContent.svelte';
 	import type { Route } from '$lib/types/route';
 
-	import { MapLibre } from 'svelte-maplibre-gl';
+	import { MapLibre, NavigationControl } from 'svelte-maplibre-gl';
 	import type {
 		StyleSpecification,
 		Map as MapLibreMap,
@@ -341,7 +341,9 @@
 
 	<main class="min-h-0 flex-1">
 		{#if activeMapStyle}
-			<MapLibre class="h-full w-full" style={activeMapStyle} bind:map />
+			<MapLibre class="h-full w-full" style={activeMapStyle} bind:map>
+				<NavigationControl position="top-right" visualizePitch={false} showCompass={true} showZoom={false}/>
+			</MapLibre>
 		{:else}
 			<div class="flex h-full w-full items-center justify-center bg-slate-200">
 				<p class="text-sm text-slate-600">Loading map...</p>
