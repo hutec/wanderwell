@@ -63,6 +63,10 @@
 				} else if (routesState.selectedRoutesVisible) {
 					// Show selected only
 					layer.filter = ['all', ['in', 'id', ...selectedIds]];
+				} else if (layerId === 'RouteHitArea') {
+					// Compare — selected routes are still drawn (as SelectedRoute),
+					// so keep every route clickable.
+					delete layer.filter;
 				} else {
 					// Compare — draw all other routes on top so only the
 					// non-overlapping parts of the selected routes remain visible
