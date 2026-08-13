@@ -3,6 +3,7 @@ import type { Route } from '$lib/types/route';
 
 export const BASEMAP_KEYS = ['graybeard', 'colorful'] as const;
 export type BasemapKey = (typeof BASEMAP_KEYS)[number];
+export type SidebarTab = 'routes' | 'settings';
 
 export const routesState = $state({
 	routes: [] as Route[],
@@ -11,7 +12,10 @@ export const routesState = $state({
 	focusedRouteId: null as number | null,
 	isSidebarOpen: true,
 	selectedRoutesVisible: true,
-	selectedBasemap: 'graybeard' as BasemapKey
+	selectedBasemap: 'graybeard' as BasemapKey,
+	activeTab: 'routes' as SidebarTab,
+	lineColor: '#cb6e94',
+	lineWidth: 0.9
 });
 
 export async function loadRoutes(userID: number | undefined) {

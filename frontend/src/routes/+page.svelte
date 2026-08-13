@@ -1,6 +1,7 @@
 <script lang="ts">
 	import RouteList from '$lib/RouteList.svelte';
-	import { routesState, loadRoutes, type BasemapKey, BASEMAP_KEYS } from '$lib/state.svelte';
+	import Settings from '$lib/Settings.svelte';
+	import { routesState, loadRoutes } from '$lib/state.svelte';
 	import { getBaseStyle } from '$lib/mapStyle.svelte';
 	import { tileServerEndpoint } from '$lib/config';
 	import { checkAuth, login, logout, authState } from '$lib/auth.svelte';
@@ -54,6 +55,14 @@
 				const layer = style.layers.find((l: { id: string }) => l.id === layerId);
 				if (!layer) continue;
 
+				if (layerId === 'Route') {
+					layer.paint = {
+						...layer.paint,
+						'line-color': routesState.lineColor,
+						'line-width': Number(routesState.lineWidth)
+					};
+				}
+
 				if (selectedIds.length === 0) {
 					// No selection — show all routes, hide arrows
 					delete layer.filter;
@@ -86,7 +95,8 @@
 					selectedLayer.filter = ['all', ['in', 'id', ...selectedIds]];
 					selectedLayer.paint = {
 						...selectedLayer.paint,
-						'line-color': SELECTED_ROUTE_COLOR
+						'line-color': SELECTED_ROUTE_COLOR,
+						'line-width': Number(routesState.lineWidth)
 					};
 					// Insert directly below the Route layer.
 					style.layers.splice(routeIndex, 0, selectedLayer);
@@ -221,111 +231,119 @@
 			</button>
 		</div>
 
-		<div class="flex min-h-0 flex-1 flex-col p-4">
-			<div class="mb-4 flex justify-center">
-				<div class="inline-flex rounded-full border border-slate-200 bg-slate-100 p-0.5">
-					{#each BASEMAP_KEYS as key (key)}
-						<label
-							class="cursor-pointer rounded-full px-3 py-1 text-sm transition-all select-none"
-							class:bg-white={routesState.selectedBasemap === key}
-							class:shadow-sm={routesState.selectedBasemap === key}
-							class:font-medium={routesState.selectedBasemap === key}
-							class:text-slate-900={routesState.selectedBasemap === key}
-							class:text-slate-500={routesState.selectedBasemap !== key}
+		<div class="flex border-b border-slate-200 bg-slate-50/50">
+			<button
+				type="button"
+				class="flex-1 border-b-2 px-4 py-2.5 text-center text-sm font-medium transition-colors"
+				class:border-amber-500={routesState.activeTab === 'routes'}
+				class:text-amber-600={routesState.activeTab === 'routes'}
+				class:border-transparent={routesState.activeTab !== 'routes'}
+				class:text-slate-500={routesState.activeTab !== 'routes'}
+				class:hover:text-slate-700={routesState.activeTab !== 'routes'}
+				onclick={() => (routesState.activeTab = 'routes')}
+			>
+				Routes
+			</button>
+			<button
+				type="button"
+				class="flex-1 border-b-2 px-4 py-2.5 text-center text-sm font-medium transition-colors"
+				class:border-amber-500={routesState.activeTab === 'settings'}
+				class:text-amber-600={routesState.activeTab === 'settings'}
+				class:border-transparent={routesState.activeTab !== 'settings'}
+				class:text-slate-500={routesState.activeTab !== 'settings'}
+				class:hover:text-slate-700={routesState.activeTab !== 'settings'}
+				onclick={() => (routesState.activeTab = 'settings')}
+			>
+				Settings
+			</button>
+		</div>
+
+		<div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+			{#if routesState.activeTab === 'routes'}
+				{#if authState.isAuthenticated}
+					<div class="mb-4 flex items-start justify-between gap-3">
+						<p class="text-sm text-slate-600">
+							Logged in as
+							<span class="font-semibold text-slate-900">{authState.currentUser?.firstname}</span>
+						</p>
+						<button
+							type="button"
+							class="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 transition hover:bg-rose-100 focus:ring-2 focus:ring-rose-400 focus:ring-offset-2 focus:outline-none"
+							onclick={logout}
 						>
-							<input
-								type="radio"
-								name="basemap"
-								class="sr-only"
-								bind:group={routesState.selectedBasemap}
-								value={key as BasemapKey}
-							/>
-							{key.charAt(0).toUpperCase() + key.slice(1)}
-						</label>
-					{/each}
-				</div>
-			</div>
-			{#if authState.isAuthenticated}
-				<div class="mb-4 flex items-start justify-between gap-3">
-					<p class="text-sm text-slate-600">
-						Logged in as
-						<span class="font-semibold text-slate-900">{authState.currentUser?.firstname}</span>
-					</p>
-					<button
-						type="button"
-						class="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 transition hover:bg-rose-100 focus:ring-2 focus:ring-rose-400 focus:ring-offset-2 focus:outline-none"
-						onclick={logout}
-					>
-						Logout
-					</button>
-				</div>
-				<div class="mb-4 flex gap-3">
-					<button
-						type="button"
-						class="self-start rounded-md border border-amber-300 bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-900 transition hover:bg-amber-200"
-						onclick={() => (routesState.routes = [])}
-					>
-						Reset selection
-					</button>
-					<button
-						type="button"
-						class="self-start rounded-md border border-amber-300 bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-900 transition hover:bg-amber-200"
-						onclick={snapToSelection}
-					>
-						Snap to selection
-					</button>
-				</div>
-				<div class="mb-4 flex justify-center">
-					<div class="inline-flex rounded-full border border-slate-200 bg-slate-100 p-0.5">
-						<label
-							class="cursor-pointer rounded-full px-3 py-1 text-sm transition-all select-none"
-							class:bg-white={routesState.selectedRoutesVisible}
-							class:shadow-sm={routesState.selectedRoutesVisible}
-							class:font-medium={routesState.selectedRoutesVisible}
-							class:text-amber-800={routesState.selectedRoutesVisible}
-							class:text-slate-500={!routesState.selectedRoutesVisible}
-						>
-							<input
-								type="radio"
-								name="route-visibility"
-								class="sr-only"
-								bind:group={routesState.selectedRoutesVisible}
-								value={true}
-							/>
-							Show selected
-						</label>
-						<label
-							class="cursor-pointer rounded-full px-3 py-1 text-sm transition-all select-none"
-							class:bg-white={!routesState.selectedRoutesVisible}
-							class:shadow-sm={!routesState.selectedRoutesVisible}
-							class:font-medium={!routesState.selectedRoutesVisible}
-							class:text-amber-800={!routesState.selectedRoutesVisible}
-							class:text-slate-500={routesState.selectedRoutesVisible}
-						>
-							<input
-								type="radio"
-								name="route-visibility"
-								class="sr-only"
-								bind:group={routesState.selectedRoutesVisible}
-								value={false}
-							/>
-							Compare
-						</label>
+							Logout
+						</button>
 					</div>
-				</div>
-				<div class="min-h-0 flex-1">
-					<RouteList />
-				</div>
-			{:else}
-				<div class="flex h-full items-start justify-end">
-					<button
-						type="button"
-						class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:outline-none"
-						onclick={login}
-					>
-						Login
-					</button>
-				</div>
+					<div class="mb-4 flex gap-3">
+						<button
+							type="button"
+							class="self-start rounded-md border border-amber-300 bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-900 transition hover:bg-amber-200"
+							onclick={() => (routesState.routes = [])}
+						>
+							Reset selection
+						</button>
+						<button
+							type="button"
+							class="self-start rounded-md border border-amber-300 bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-900 transition hover:bg-amber-200"
+							onclick={snapToSelection}
+						>
+							Snap to selection
+						</button>
+					</div>
+					<div class="mb-4 flex justify-center">
+						<div class="inline-flex rounded-full border border-slate-200 bg-slate-100 p-0.5">
+							<label
+								class="cursor-pointer rounded-full px-3 py-1 text-sm transition-all select-none"
+								class:bg-white={routesState.selectedRoutesVisible}
+								class:shadow-sm={routesState.selectedRoutesVisible}
+								class:font-medium={routesState.selectedRoutesVisible}
+								class:text-amber-800={routesState.selectedRoutesVisible}
+								class:text-slate-500={!routesState.selectedRoutesVisible}
+							>
+								<input
+									type="radio"
+									name="route-visibility"
+									class="sr-only"
+									bind:group={routesState.selectedRoutesVisible}
+									value={true}
+								/>
+								Show selected
+							</label>
+							<label
+								class="cursor-pointer rounded-full px-3 py-1 text-sm transition-all select-none"
+								class:bg-white={!routesState.selectedRoutesVisible}
+								class:shadow-sm={!routesState.selectedRoutesVisible}
+								class:font-medium={!routesState.selectedRoutesVisible}
+								class:text-amber-800={!routesState.selectedRoutesVisible}
+								class:text-slate-500={routesState.selectedRoutesVisible}
+							>
+								<input
+									type="radio"
+									name="route-visibility"
+									class="sr-only"
+									bind:group={routesState.selectedRoutesVisible}
+									value={false}
+								/>
+								Compare
+							</label>
+						</div>
+					</div>
+					<div class="min-h-0 flex-1">
+						<RouteList />
+					</div>
+				{:else}
+					<div class="flex h-full items-start justify-end">
+						<button
+							type="button"
+							class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:outline-none"
+							onclick={login}
+						>
+							Login
+						</button>
+					</div>
+				{/if}
+			{:else if routesState.activeTab === 'settings'}
+				<Settings />
 			{/if}
 		</div>
 	</aside>
