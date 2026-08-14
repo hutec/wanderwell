@@ -60,7 +60,7 @@
 					if (layerId === 'RouteArrows') {
 						layer.layout = { ...layer.layout, visibility: 'none' };
 					}
-				} else if (routesState.selectedRoutesVisible) {
+				} else if (routesState.viewMode === 'selected') {
 					// Show selected only
 					layer.filter = ['all', ['in', 'id', ...selectedIds]];
 				} else if (layerId === 'RouteHitArea') {
@@ -80,7 +80,7 @@
 
 			// In compare mode, add the selected routes in a distinct color beneath
 			// the regular Route layer so their unique (non-overlapping) segments show.
-			if (selectedIds.length > 0 && !routesState.selectedRoutesVisible) {
+			if (selectedIds.length > 0 && routesState.viewMode === 'compare') {
 				const routeLayer = style.layers.find((l: { id: string }) => l.id === 'Route');
 				const routeIndex = style.layers.findIndex((l: { id: string }) => l.id === 'Route');
 
@@ -283,35 +283,35 @@
 					<div class="inline-flex rounded-full border border-slate-200 bg-slate-100 p-0.5">
 						<label
 							class="cursor-pointer rounded-full px-3 py-1 text-sm transition-all select-none"
-							class:bg-white={routesState.selectedRoutesVisible}
-							class:shadow-sm={routesState.selectedRoutesVisible}
-							class:font-medium={routesState.selectedRoutesVisible}
-							class:text-amber-800={routesState.selectedRoutesVisible}
-							class:text-slate-500={!routesState.selectedRoutesVisible}
+							class:bg-white={routesState.viewMode === 'selected'}
+							class:shadow-sm={routesState.viewMode === 'selected'}
+							class:font-medium={routesState.viewMode === 'selected'}
+							class:text-amber-800={routesState.viewMode === 'selected'}
+							class:text-slate-500={routesState.viewMode !== 'selected'}
 						>
 							<input
 								type="radio"
 								name="route-visibility"
 								class="sr-only"
-								bind:group={routesState.selectedRoutesVisible}
-								value={true}
+								bind:group={routesState.viewMode}
+								value="selected"
 							/>
 							Show selected
 						</label>
 						<label
 							class="cursor-pointer rounded-full px-3 py-1 text-sm transition-all select-none"
-							class:bg-white={!routesState.selectedRoutesVisible}
-							class:shadow-sm={!routesState.selectedRoutesVisible}
-							class:font-medium={!routesState.selectedRoutesVisible}
-							class:text-amber-800={!routesState.selectedRoutesVisible}
-							class:text-slate-500={routesState.selectedRoutesVisible}
+							class:bg-white={routesState.viewMode === 'compare'}
+							class:shadow-sm={routesState.viewMode === 'compare'}
+							class:font-medium={routesState.viewMode === 'compare'}
+							class:text-amber-800={routesState.viewMode === 'compare'}
+							class:text-slate-500={routesState.viewMode !== 'compare'}
 						>
 							<input
 								type="radio"
 								name="route-visibility"
 								class="sr-only"
-								bind:group={routesState.selectedRoutesVisible}
-								value={false}
+								bind:group={routesState.viewMode}
+								value="compare"
 							/>
 							Compare
 						</label>

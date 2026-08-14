@@ -4,13 +4,15 @@ import type { Route } from '$lib/types/route';
 export const BASEMAP_KEYS = ['graybeard', 'colorful'] as const;
 export type BasemapKey = (typeof BASEMAP_KEYS)[number];
 
+export type RouteViewMode = 'selected' | 'compare';
+
 export const routesState = $state({
 	routes: [] as Route[],
 	availableRoutes: [] as Route[],
 	isLoadingRoutes: false,
 	focusedRouteId: null as number | null,
 	isSidebarOpen: true,
-	selectedRoutesVisible: true,
+	viewMode: 'selected' as RouteViewMode,
 	selectedBasemap: 'graybeard' as BasemapKey
 });
 
