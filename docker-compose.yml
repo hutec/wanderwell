@@ -78,6 +78,7 @@ services:
       - ./tileserver-gl:/data
     ports:
       - 4545:4545
+    restart: unless-stopped
 
 volumes:
   postgis-data:
