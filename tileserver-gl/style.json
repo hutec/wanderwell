@@ -6,9 +6,7 @@
   "sources": {
     "user_routes": {
       "type": "vector",
-      "tiles": [
-        "http://tileserver:3000/route/{z}/{x}/{y}"
-      ],
+      "tiles": ["http://tileserver:3000/route/{z}/{x}/{y}"],
       "minzoom": 0,
       "maxzoom": 22
     }
@@ -19,14 +17,20 @@
       "type": "line",
       "source": "user_routes",
       "source-layer": "route",
+      "filter": ["==", ["get", "user_id"], 41340942],
       "layout": {
         "line-join": "round",
         "line-cap": "round"
       },
       "paint": {
-        "line-color": "#fc4c02",
-        "line-width": 3,
-        "line-opacity": 0.85
+        "line-color": "#f9c004",
+        "line-width": {
+          "base": 1.4,
+          "stops": [
+            [8, 0.8],
+            [20, 15]
+          ]
+        }
       }
     }
   ]
