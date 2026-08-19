@@ -1,5 +1,4 @@
 docker-compose.override.yml
-docker-compose.prod.yml
 .env
 
 .DS_Store
