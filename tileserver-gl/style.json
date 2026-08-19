@@ -1,0 +1,33 @@
+{
+  "version": 8,
+  "name": "Wanderwell Explorer & Routes",
+  "center": [0, 0],
+  "zoom": 2,
+  "sources": {
+    "user_routes": {
+      "type": "vector",
+      "tiles": [
+        "http://tileserver:3000/route/{z}/{x}/{y}"
+      ],
+      "minzoom": 0,
+      "maxzoom": 22
+    }
+  },
+  "layers": [
+    {
+      "id": "user-routes-line",
+      "type": "line",
+      "source": "user_routes",
+      "source-layer": "route",
+      "layout": {
+        "line-join": "round",
+        "line-cap": "round"
+      },
+      "paint": {
+        "line-color": "#fc4c02",
+        "line-width": 3,
+        "line-opacity": 0.85
+      }
+    }
+  ]
+}

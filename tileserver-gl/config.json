@@ -1,0 +1,23 @@
+{
+  "options": {
+    "paths": {
+      "root": "",
+      "styles": "",
+      "fonts": "",
+      "sprites": "",
+      "mbtiles": ""
+    },
+    "frontPage": true
+  },
+  "styles": {
+    "wanderwell": {
+      "style": "style.json",
+      "tilejson": {
+        "type": "overlay",
+        "format": "png",
+        "bounds": [-180, -85.05112877980659, 180, 85.05112877980659]
+      }
+    }
+  },
+  "data": {}
+}
