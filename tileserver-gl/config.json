@@ -10,8 +10,16 @@
     "frontPage": true
   },
   "styles": {
-    "wanderwell": {
-      "style": "style.json",
+    "routes": {
+      "style": "routes-style.json",
+      "tilejson": {
+        "type": "overlay",
+        "format": "png",
+        "bounds": [-180, -85.05112877980659, 180, 85.05112877980659]
+      }
+    },
+    "explorer-tiles": {
+      "style": "explorer-tiles-style.json",
       "tilejson": {
         "type": "overlay",
         "format": "png",

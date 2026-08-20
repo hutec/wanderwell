@@ -1,0 +1,29 @@
+{
+  "version": 8,
+  "name": "Wanderwell Explorer Tiles",
+  "center": [0, 0],
+  "zoom": 2,
+  "sources": {
+    "user_explorer_tiles": {
+      "type": "vector",
+      "tiles": [
+        "http://vector-tileserver:3000/user_explorer_tiles/{z}/{x}/{y}?user_id=41340942"
+      ],
+      "minzoom": 0,
+      "maxzoom": 14
+    }
+  },
+  "layers": [
+    {
+      "id": "ExplorerCoverage",
+      "type": "fill",
+      "source": "user_explorer_tiles",
+      "source-layer": "user_explorer_tiles",
+      "paint": {
+        "fill-color": "rgba(203, 110, 148, 0.50)",
+        "fill-opacity": 1,
+        "fill-outline-color": "rgba(203, 110, 148, 0.8)"
+      }
+    }
+  ]
+}
