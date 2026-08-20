@@ -6,7 +6,7 @@
   "sources": {
     "user_routes": {
       "type": "vector",
-      "tiles": ["http://tileserver:3000/route/{z}/{x}/{y}"],
+      "tiles": ["http://vector-tileserver:3000/route/{z}/{x}/{y}"],
       "minzoom": 0,
       "maxzoom": 22
     }
