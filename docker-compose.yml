@@ -51,7 +51,7 @@ services:
       timeout: 3s
       retries: 10
 
-  tileserver:
+  vector-tileserver:
     image: ghcr.io/maplibre/martin:1.4.0
     command: ["--cache-size", "0"]
     environment:
@@ -68,7 +68,17 @@ services:
     volumes:
       - ./varnish/default.vcl:/etc/varnish/default.vcl:ro
     depends_on:
-      - tileserver
+      - vector-tileserver
+      - raster-tileserver
+    restart: unless-stopped
+
+  raster-tileserver:
+    image: maptiler/tileserver-gl:v5.5.0
+    command: "-p 4545 -c config.json"
+    volumes:
+      - ./tileserver-gl:/data
+    ports:
+      - 4545:4545
     restart: unless-stopped
 
 volumes:

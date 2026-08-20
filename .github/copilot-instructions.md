@@ -14,7 +14,7 @@ frontend (SvelteKit/static) → backend (Go REST API) → PostgreSQL + PostGIS
 - **Backend**: Go + chi router, port 3000. Session-based auth via Strava OAuth (goth + gorilla/sessions). Type-safe DB access via sqlc-generated code.
 - **Frontend**: SvelteKit with `adapter-static` (prerendered, no SSR). Svelte 5 runes for reactivity. Communicates with backend using `credentials: 'include'` for cookie-based session.
 - **Database**: PostgreSQL 18 + PostGIS. Routes stored as `geometry(LineString, 4326)`. Martin serves MVT tiles directly from PostGIS via `user_routes(z, x, y, query_params)` function.
-- **Docker Compose**: All four services (`backend`, `frontend`, `postgis`, `tileserver`) run together. `docker-compose.override.yml` swaps the postgis image for a local dev build.
+- **Docker Compose**: Services (`backend`, `frontend`, `postgis`, `vector-tileserver`, `raster-tileserver`, `vinylcache`) run together. `docker-compose.override.yml` swaps the postgis image for a local dev build.
 
 ## Commands
 

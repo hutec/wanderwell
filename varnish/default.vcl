@@ -1,8 +1,13 @@
 vcl 4.1;
 
-backend default {
-    .host = "tileserver";
+backend vector_tileserver {
+    .host = "vector-tileserver";
     .port = "3000";
+}
+
+backend raster_tileserver {
+    .host = "raster-tileserver";
+    .port = "4545";
 }
 
 # Allow BAN requests from localhost and all private (Docker) network ranges
@@ -25,6 +30,14 @@ sub vcl_recv {
         }
         ban("req.url ~ [?&]user_id=" + req.http.X-User-Id + "(&|$)");
         return(synth(200, "Ban added"));
+    }
+
+    # Route /styles to raster tileserver (TileServer GL)
+    # Raster styles are served at http://localhost:4545/styles/wanderwell/512/{z}/{x}/{y}.png
+    if (req.url ~ "^/styles") {
+        set req.backend_hint = raster_tileserver;
+    } else {
+        set req.backend_hint = vector_tileserver;
     }
 
     if (req.method != "GET" && req.method != "HEAD") {
