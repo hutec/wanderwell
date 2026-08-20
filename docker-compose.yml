@@ -69,6 +69,7 @@ services:
       - ./varnish/default.vcl:/etc/varnish/default.vcl:ro
     depends_on:
       - tileserver
+      - overlay-tileserver
     restart: unless-stopped
 
   overlay-tileserver:

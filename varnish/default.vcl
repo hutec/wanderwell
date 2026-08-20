@@ -5,6 +5,11 @@ backend default {
     .port = "3000";
 }
 
+backend tileserver_gl {
+    .host = "overlay-tileserver";
+    .port = "4545";
+}
+
 # Allow BAN requests from localhost and all private (Docker) network ranges
 acl purge_acl {
     "127.0.0.1";
@@ -25,6 +30,14 @@ sub vcl_recv {
         }
         ban("req.url ~ [?&]user_id=" + req.http.X-User-Id + "(&|$)");
         return(synth(200, "Ban added"));
+    }
+
+    # Route /styles to TileServer GL
+    # Raster styles are served at http://localhost:4545/styles/wanderwell/512/{z}/{x}/{y}.png
+    if (req.url ~ "^/styles") {
+        set req.backend_hint = tileserver_gl;
+    } else {
+        set req.backend_hint = default;
     }
 
     if (req.method != "GET" && req.method != "HEAD") {
