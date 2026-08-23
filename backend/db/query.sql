@@ -40,6 +40,11 @@ ON CONFLICT (user_id) DO UPDATE SET
     write_unique_distance = EXCLUDED.write_unique_distance
 RETURNING user_id, write_unique_distance;
 
+-- name: GetUserIDByToken :one
+SELECT user_id
+FROM user_token
+WHERE token = $1;
+
 -- name: RouteExists :one
 SELECT COUNT(*) > 0
 FROM route

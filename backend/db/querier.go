@@ -20,6 +20,7 @@ type Querier interface {
 	// itself (PostGIS measures the raw GPS polyline, which is slightly longer than
 	// Strava's smoothed distance).
 	GetRouteUniqueDistanceMeters(ctx context.Context, id int64) (float64, error)
+	GetUserIDByToken(ctx context.Context, token string) (int64, error)
 	GetUserPreferences(ctx context.Context, userID int64) (UserPreference, error)
 	ListAthleteIDs(ctx context.Context) ([]int64, error)
 	ListRoutesByUser(ctx context.Context, userID int64) ([]ListRoutesByUserRow, error)
