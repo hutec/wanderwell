@@ -55,6 +55,13 @@ AFTER INSERT ON athlete
 FOR EACH ROW
 EXECUTE FUNCTION ensure_user_preferences();
 
+-- Create user token table
+CREATE TABLE IF NOT EXISTS user_token (
+    user_id BIGINT PRIMARY KEY,
+    token TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES athlete(id)
+);
+
 -- Create spatial index
 CREATE INDEX IF NOT EXISTS route_geom_idx ON route USING GIST (geom);
 CREATE INDEX IF NOT EXISTS route_user_id_id_idx ON route (user_id, id);

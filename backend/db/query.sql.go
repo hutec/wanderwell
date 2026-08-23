@@ -132,6 +132,19 @@ func (q *Queries) GetRouteUniqueDistanceMeters(ctx context.Context, id int64) (f
 	return unique_distance_meters, err
 }
 
+const getUserIDByToken = `-- name: GetUserIDByToken :one
+SELECT user_id
+FROM user_token
+WHERE token = $1
+`
+
+func (q *Queries) GetUserIDByToken(ctx context.Context, token string) (int64, error) {
+	row := q.db.QueryRow(ctx, getUserIDByToken, token)
+	var user_id int64
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const getUserPreferences = `-- name: GetUserPreferences :one
 SELECT user_id, write_unique_distance
 FROM user_preferences
