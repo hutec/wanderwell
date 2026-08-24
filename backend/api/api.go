@@ -51,6 +51,58 @@ type contextKey string
 
 const userIDKey contextKey = "userID"
 
+// RequireCookieAuth accepts only the browser session, not token authentication.
+func (s *Server) RequireCookieAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session, err := gothic.Store.Get(r, "user-session")
+		if err != nil {
+			http.Error(w, "Authentication required", http.StatusUnauthorized)
+			return
+		}
+
+		userID, ok := session.Values["user_id"].(int64)
+		if !ok || userID == 0 {
+			http.Error(w, "Authentication required", http.StatusUnauthorized)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), userIDKey, userID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// RequireTokenAuth accepts only a token query parameter validated against the database.
+func (s *Server) RequireTokenAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		originalURI := r.Header.Get("X-Forwarded-Uri")
+		parsedURI, err := url.Parse(originalURI)
+		if err != nil {
+			http.Error(w, "Invalid forwarded URI", http.StatusBadRequest)
+			return
+		}
+
+		token := parsedURI.Query().Get("token")
+		if token == "" {
+			http.Error(w, "Tile token required", http.StatusUnauthorized)
+			return
+		}
+
+		userID, err := s.queries.GetUserIDByToken(r.Context(), token)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				http.Error(w, "Invalid tile token", http.StatusUnauthorized)
+				return
+			}
+			slog.Error("Failed to look up tile token", "error", err)
+			http.Error(w, "Failed to authenticate", http.StatusInternalServerError)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), userIDKey, userID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 // RequireAuth is a middleware that checks for a valid user session or token and
 // adds the user ID to the request context
 func (s *Server) RequireAuth(next http.Handler) http.Handler {
@@ -150,20 +202,28 @@ func (s *Server) setupRoutes() {
 	// to avoid log noise and disk usage.
 	s.router.Use(httplog.RequestLogger(slog.Default(), &httplog.Options{
 		Skip: func(req *http.Request, _ int) bool {
-			return req.URL.Path == "/auth/tiles"
+			return req.URL.Path == "/auth/vector" || req.URL.Path == "/auth/raster"
 		},
 	}))
 
 	// Protected routes - require authentication
 	s.router.Group(func(r chi.Router) {
-		r.Use(s.RequireAuth)
+		r.Use(s.RequireCookieAuth)
 		r.Get("/me", s.getCurrentUser)
 		r.Get("/preferences", s.getUserPreferences)
 		r.Put("/preferences", s.updateUserPreferences)
 		r.Get("/route_details", s.listRoutesWithoutRouteData)
 		// Dummy endpoint to allow Traefik to verify authentication for tile
 		// requests without needing to duplicate auth logic in the tile service.
-		r.Get("/auth/tiles", func(w http.ResponseWriter, r *http.Request) {
+		r.Get("/auth/vector", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+	})
+
+	// ForwardAuth endpoint for raster tiles; only a database-backed token is accepted.
+	s.router.Group(func(r chi.Router) {
+		r.Use(s.RequireTokenAuth)
+		r.Get("/auth/raster", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		})
 	})
