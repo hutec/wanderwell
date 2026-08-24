@@ -32,12 +32,20 @@ sub vcl_recv {
         return(synth(200, "Ban added"));
     }
 
-    # Route /styles to raster tileserver (TileServer GL)
-    # Raster styles are served at http://localhost:4545/styles/wanderwell/512/{z}/{x}/{y}.png
-    if (req.url ~ "^/styles") {
+    # Keep the public service prefixes at Traefik and route them here.
+    # Strip the prefix only after selecting the upstream.
+    if (req.url ~ "^/raster(?:/|$)") {
         set req.backend_hint = raster_tileserver;
-    } else {
+        set req.url = regsub(req.url, "^/raster", "");
+        # The token is checked by ForwardAuth and is not needed upstream or in
+        # the cache key.
+        set req.url = regsuball(req.url, "([?&])token=[^&]*(&|$)", "\1");
+        set req.url = regsub(req.url, "\?$", "");
+    } else if (req.url ~ "^/vector(?:/|$)") {
         set req.backend_hint = vector_tileserver;
+        set req.url = regsub(req.url, "^/vector", "");
+    } else {
+        return(synth(404, "Unknown tile service"));
     }
 
     if (req.method != "GET" && req.method != "HEAD") {
