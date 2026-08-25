@@ -53,7 +53,7 @@ services:
 
   vector-tileserver:
     image: ghcr.io/maplibre/martin:1.4.0
-    command: ["--cache-size", "0"]
+    command: ["--cache-size", "0", "--base-path", "/vector"]
     environment:
       - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@postgis:5432/wanderwell?sslmode=disable
     depends_on:
