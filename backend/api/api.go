@@ -103,64 +103,6 @@ func (s *Server) RequireTokenAuth(next http.Handler) http.Handler {
 	})
 }
 
-// RequireAuth is a middleware that checks for a valid user session or token and
-// adds the user ID to the request context
-func (s *Server) RequireAuth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		session, err := gothic.Store.Get(r, "user-session")
-		if err != nil {
-			slog.Warn("Failed to get session; trying token authentication", "error", err)
-		}
-
-		var userID int64
-		if err == nil {
-			// Check if user_id is present in session
-			userIDRaw, ok := session.Values["user_id"]
-			if ok {
-				userID, ok = userIDRaw.(int64)
-				if !ok {
-					slog.Error("user_id is not int64", "type", fmt.Sprintf("%T", userIDRaw))
-					http.Error(w, "Invalid user_id type", http.StatusInternalServerError)
-					return
-				}
-			}
-		}
-
-		if userID == 0 {
-			// Might be forwarded from Traefik with a token in the query string
-			originalURI := r.Header.Get("X-Forwarded-Uri")
-			query, err := url.Parse(originalURI)
-			if err != nil {
-				slog.Error("Failed to parse X-Forwarded-Uri", "error", err, "originalURI", originalURI)
-				http.Error(w, "Invalid forwarded URI", http.StatusBadRequest)
-				return
-			}
-
-			token := query.Query().Get("token")
-			if token == "" {
-				slog.Error("user_id not found in session or token parameter")
-				http.Error(w, "Authentication required", http.StatusUnauthorized)
-				return
-			}
-
-			userID, err = s.queries.GetUserIDByToken(r.Context(), token)
-			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
-					http.Error(w, "Invalid token", http.StatusUnauthorized)
-					return
-				}
-				slog.Error("Failed to look up user by token", "error", err)
-				http.Error(w, "Failed to authenticate", http.StatusInternalServerError)
-				return
-			}
-		}
-
-		// Add userID to request context
-		ctx := context.WithValue(r.Context(), userIDKey, userID)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
 // RequireAdmin is a middleware that checks if the user is the configured admin
 func (s *Server) RequireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -230,7 +172,7 @@ func (s *Server) setupRoutes() {
 
 	// Admin-only routes - require authentication and admin privileges
 	s.router.Group(func(r chi.Router) {
-		r.Use(s.RequireAuth)
+		r.Use(s.RequireCookieAuth)
 		r.Use(s.RequireAdmin)
 		r.Get("/update", s.updateCacheForUser)
 	})
