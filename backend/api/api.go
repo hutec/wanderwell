@@ -155,9 +155,24 @@ func (s *Server) setupRoutes() {
 		r.Get("/preferences", s.getUserPreferences)
 		r.Put("/preferences", s.updateUserPreferences)
 		r.Get("/route_details", s.listRoutesWithoutRouteData)
-		// Dummy endpoint to allow Traefik to verify authentication for tile
-		// requests without needing to duplicate auth logic in the tile service.
+		// Traefik ForwardAuth endpoint for vector tiles; ensures the
+		// authenticated session matches the requested user_id query parameter.
 		r.Get("/auth/vector", func(w http.ResponseWriter, r *http.Request) {
+			userID := r.Context().Value(userIDKey).(int64)
+
+			// Traefik passes the original URI in X-Forwarded-Uri header
+			forwardedURI, err := url.Parse(r.Header.Get("X-Forwarded-Uri"))
+			if err != nil {
+				http.Error(w, "Invalid forwarded URI", http.StatusBadRequest)
+				return
+			}
+
+			targetUserID, _ := strconv.ParseInt(forwardedURI.Query().Get("user_id"), 10, 64)
+			if targetUserID == 0 || targetUserID != userID {
+				http.Error(w, "Forbidden", http.StatusForbidden)
+				return
+			}
+
 			w.WriteHeader(http.StatusOK)
 		})
 	})
