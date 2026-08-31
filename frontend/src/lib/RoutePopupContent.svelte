@@ -20,6 +20,10 @@
 
 	const formatDistance = (distance: number | null) =>
 		distance != null ? `${distance.toFixed(1)} km` : 'Unknown distance';
+
+	const formatElevation = (elevation: number | null) =>
+	    elevation != null ? `${elevation.toFixed(0)} m` : 'Unknown elevation';
+
 </script>
 
 <div class="popup-container">
@@ -33,8 +37,7 @@
 			onkeydown={(e) => e.key === 'Enter' && onSelect(feature.id)}
 		>
 			<strong>{feature.name}</strong><br />
-			<span class="meta">{formatDate(feature.start_date)} · {formatDistance(feature.distance)}</span
-			>
+			<span class="meta">{formatDate(feature.start_date)} · {formatDistance(feature.distance)} · {formatElevation(feature.elevation)}</span>
 		</div>
 	{/each}
 </div>
