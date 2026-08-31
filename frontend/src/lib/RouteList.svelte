@@ -5,6 +5,10 @@
 		return `${distance.toFixed(2)} km`;
 	};
 
+	const formatElevation = (elevation: number) => {
+	    return `${elevation.toFixed(0)} m`;
+	};
+
 	$effect(() => {
 		const id = routesState.focusedRouteId;
 		// Also track sidebar open state so the scroll re-fires when the sidebar becomes visible
@@ -41,7 +45,7 @@
 						<div class="min-w-0">
 							<div class="truncate text-sm font-medium text-slate-900">{route.name}</div>
 							<div class="text-xs text-slate-500">
-								{new Date(route.start_date).toLocaleDateString()} · {formatDistance(route.distance)}
+								{new Date(route.start_date).toLocaleDateString()} · {formatDistance(route.distance)} · {formatElevation(route.elevation)}
 							</div>
 						</div>
 					</label>
