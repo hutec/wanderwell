@@ -76,6 +76,7 @@ CREATE OR REPLACE FUNCTION user_routes(z int, x int, y int, query_params json)
 		      sport_type,
 		      distance,
 		      start_date,
+			  elevation,
 		      ST_AsMVTGeom(
 		        ST_Transform(geom, 3857),
 		        ST_TileEnvelope(z, x, y),
