@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"time"
 	"wanderwell/backend/db"
-	"wanderwell/backend/strava"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -22,9 +21,15 @@ import (
 	"github.com/markbates/goth/gothic"
 )
 
+type ActivityCacheUpdater interface {
+	UpdateActivityCache(userID int64) error
+	AddDetailedActivity(activityID int64, athleteID int64) error
+	WriteUniqueDistanceDescription(activityID int64, athleteID int64)
+}
+
 type Server struct {
-	queries      *db.Queries
-	cacheUpdater *strava.CacheUpdater
+	queries      db.Querier
+	cacheUpdater ActivityCacheUpdater
 	router       chi.Router
 	frontendURL  string
 	verifyToken  string
@@ -32,9 +37,13 @@ type Server struct {
 	adminUserID  int64
 }
 
-func NewServer(pool *pgxpool.Pool, cacheUpdater *strava.CacheUpdater, frontendURL string, verifyToken string, tileCacheURL string, adminUserID int64) *Server {
+func NewServer(pool *pgxpool.Pool, cacheUpdater ActivityCacheUpdater, frontendURL string, verifyToken string, tileCacheURL string, adminUserID int64) *Server {
+	return NewServerWithQuerier(db.New(pool), cacheUpdater, frontendURL, verifyToken, tileCacheURL, adminUserID)
+}
+
+func NewServerWithQuerier(queries db.Querier, cacheUpdater ActivityCacheUpdater, frontendURL string, verifyToken string, tileCacheURL string, adminUserID int64) *Server {
 	s := &Server{
-		queries:      db.New(pool),
+		queries:      queries,
 		cacheUpdater: cacheUpdater,
 		router:       chi.NewRouter(),
 		frontendURL:  frontendURL,
@@ -508,7 +517,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func listRoutesByUser(q *db.Queries, userID int64) http.HandlerFunc {
+func listRoutesByUser(q db.Querier, userID int64) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		routes, err := q.ListRoutesByUser(r.Context(), userID)
 		if err != nil {
