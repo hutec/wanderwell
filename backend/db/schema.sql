@@ -58,7 +58,7 @@ EXECUTE FUNCTION ensure_user_preferences();
 -- Create user token table
 CREATE TABLE IF NOT EXISTS user_token (
     user_id BIGINT PRIMARY KEY,
-    token TEXT NOT NULL,
+    token TEXT NOT NULL UNIQUE,
     FOREIGN KEY (user_id) REFERENCES athlete(id)
 );
 
