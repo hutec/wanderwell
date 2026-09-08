@@ -72,14 +72,36 @@ services:
       - raster-tileserver
     restart: unless-stopped
 
+  # Builds the TileServer GL configuration from the athletes known when this
+  # Compose stack starts. Recreate this one-shot service to refresh styles.
+  tileserver-style-bundle:
+    image: alpine:3.21
+    environment:
+      RASTER_TILE_TOKEN: ${RASTER_TILE_TOKEN}
+    command: >
+      sh -c 'apk add --no-cache curl tar &&
+             sh /scripts/fetch-style-bundle.sh &&
+             chown -R 999:999 /data &&
+             chmod -R u+rwX,go+rX /data'
+    volumes:
+      - ./tileserver-gl/fetch-style-bundle.sh:/scripts/fetch-style-bundle.sh:ro
+      - tileserver-data:/data
+    depends_on:
+      - backend
+    restart: "no"
+
   raster-tileserver:
     image: maptiler/tileserver-gl:v5.5.0
-    command: "-p 4545 -c config.json"
+    command: "-p 4545 -c /data/config.json"
     volumes:
-      - ./tileserver-gl:/data
+      - tileserver-data:/data:ro
     ports:
       - 4545:4545
+    depends_on:
+      tileserver-style-bundle:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:
   postgis-data:
+  tileserver-data:
