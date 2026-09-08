@@ -1,0 +1,16 @@
+{
+  "options": {
+    "paths": {
+      "root": "",
+      "styles": "",
+      "fonts": "",
+      "sprites": "",
+      "mbtiles": ""
+    },
+    "frontPage": true
+  },
+  "styles": {
+{{STYLES}}
+  },
+  "data": {}
+}
