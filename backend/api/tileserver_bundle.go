@@ -26,17 +26,24 @@ func (s *Server) getTileserverStyleBundle(w http.ResponseWriter, r *http.Request
 
 	config := tileserverConfig{
 		Options: tileserverOptions{Paths: tileserverPaths{Styles: "styles"}},
-		Styles:  make(map[string]tileserverStyleConfig, len(athleteIDs)),
+		Styles:  make(map[string]tileserverStyleConfig, len(athleteIDs)*2),
 		Data:    map[string]any{},
 	}
-	styles := make(map[string]tileserverExplorerStyle, len(athleteIDs))
+	styles := make(map[string]tileserverStyle, len(athleteIDs)*2)
 	for _, athleteID := range athleteIDs {
-		name := fmt.Sprintf("explorer-%d", athleteID)
-		config.Styles[name] = tileserverStyleConfig{
-			Style:    name + ".json",
+		explorerName := fmt.Sprintf("explorer-%d", athleteID)
+		config.Styles[explorerName] = tileserverStyleConfig{
+			Style:    explorerName + ".json",
 			TileJSON: explorerTileJSON,
 		}
-		styles[name] = newExplorerStyle(athleteID)
+		styles[explorerName] = newExplorerStyle(athleteID)
+
+		routesName := fmt.Sprintf("routes-%d", athleteID)
+		config.Styles[routesName] = tileserverStyleConfig{
+			Style:    routesName + ".json",
+			TileJSON: routesTileJSON,
+		}
+		styles[routesName] = newRoutesStyle(athleteID)
 	}
 
 	w.Header().Set("Content-Type", "application/gzip")
@@ -77,11 +84,18 @@ func writeBundleJSON(tw *tar.Writer, filename string, value any) error {
 	return err
 }
 
-var explorerTileJSON = tileserverTileJSON{
-	Type:   "overlay",
-	Format: "png",
-	Bounds: [4]float64{-180, -85.05112877980659, 180, 85.05112877980659},
-}
+var (
+	explorerTileJSON = tileserverTileJSON{
+		Type:   "overlay",
+		Format: "png",
+		Bounds: [4]float64{-180, -85.05112877980659, 180, 85.05112877980659},
+	}
+	routesTileJSON = tileserverTileJSON{
+		Type:   "overlay",
+		Format: "png",
+		Bounds: [4]float64{-180, -85.05112877980659, 180, 85.05112877980659},
+	}
+)
 
 type tileserverConfig struct {
 	Options tileserverOptions                `json:"options"`
@@ -112,13 +126,13 @@ type tileserverTileJSON struct {
 	Bounds [4]float64 `json:"bounds"`
 }
 
-type tileserverExplorerStyle struct {
+type tileserverStyle struct {
 	Version int                               `json:"version"`
 	Name    string                            `json:"name"`
 	Center  [2]float64                        `json:"center"`
 	Zoom    int                               `json:"zoom"`
 	Sources map[string]tileserverVectorSource `json:"sources"`
-	Layers  []tileserverFillLayer             `json:"layers"`
+	Layers  []tileserverLayer                 `json:"layers"`
 }
 
 type tileserverVectorSource struct {
@@ -128,16 +142,17 @@ type tileserverVectorSource struct {
 	MaxZoom int      `json:"maxzoom"`
 }
 
-type tileserverFillLayer struct {
+type tileserverLayer struct {
 	ID          string                 `json:"id"`
 	Type        string                 `json:"type"`
 	Source      string                 `json:"source"`
 	SourceLayer string                 `json:"source-layer"`
+	Layout      map[string]interface{} `json:"layout,omitempty"`
 	Paint       map[string]interface{} `json:"paint"`
 }
 
-func newExplorerStyle(athleteID int64) tileserverExplorerStyle {
-	return tileserverExplorerStyle{
+func newExplorerStyle(athleteID int64) tileserverStyle {
+	return tileserverStyle{
 		Version: 8,
 		Name:    fmt.Sprintf("Wanderwell Explorer Tiles %d", athleteID),
 		Center:  [2]float64{0, 0},
@@ -150,7 +165,7 @@ func newExplorerStyle(athleteID int64) tileserverExplorerStyle {
 				MaxZoom: 14,
 			},
 		},
-		Layers: []tileserverFillLayer{{
+		Layers: []tileserverLayer{{
 			ID:          "ExplorerCoverage",
 			Type:        "fill",
 			Source:      "user_explorer_tiles",
@@ -159,6 +174,43 @@ func newExplorerStyle(athleteID int64) tileserverExplorerStyle {
 				"fill-color":         "rgba(203, 110, 148, 0.50)",
 				"fill-opacity":       1,
 				"fill-outline-color": "rgba(203, 110, 148, 0.8)",
+			},
+		}},
+	}
+}
+
+func newRoutesStyle(athleteID int64) tileserverStyle {
+	return tileserverStyle{
+		Version: 8,
+		Name:    fmt.Sprintf("Wanderwell Routes %d", athleteID),
+		Center:  [2]float64{0, 0},
+		Zoom:    2,
+		Sources: map[string]tileserverVectorSource{
+			"user_routes": {
+				Type:    "vector",
+				Tiles:   []string{fmt.Sprintf("http://vector-tileserver:3000/user_routes/{z}/{x}/{y}?user_id=%d", athleteID)},
+				MinZoom: 0,
+				MaxZoom: 22,
+			},
+		},
+		Layers: []tileserverLayer{{
+			ID:          "user-routes-line",
+			Type:        "line",
+			Source:      "user_routes",
+			SourceLayer: "user_routes",
+			Layout: map[string]interface{}{
+				"line-join": "round",
+				"line-cap":  "round",
+			},
+			Paint: map[string]interface{}{
+				"line-color": "#f9c004",
+				"line-width": map[string]interface{}{
+					"base": 1.4,
+					"stops": []interface{}{
+						[]interface{}{8, 0.8},
+						[]interface{}{20, 15},
+					},
+				},
 			},
 		}},
 	}

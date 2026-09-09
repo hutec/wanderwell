@@ -75,8 +75,8 @@ curl -G https://www.strava.com/api/v3/push_subscriptions \
 TileServer GL loads styles from files at startup. The `tileserver-style-bundle`
 Compose job fetches an internally-authenticated, generated bundle from the
 backend and writes it to the `tileserver-data` volume before
-`raster-tileserver` starts. The backend generates one `explorer-<athlete-id>`
-style for every athlete currently in the database.
+`raster-tileserver` starts. The backend generates `explorer-<athlete-id>` and
+`routes-<athlete-id>` styles for every athlete currently in the database.
 
 Set `RASTER_TILE_TOKEN` in `.env` to a valid `user_token.token` value. The
 bundle job authenticates with the existing `RequireTokenAuth` middleware. To
@@ -87,10 +87,11 @@ and raster server:
 docker compose up --force-recreate tileserver-style-bundle raster-tileserver
 ```
 
-The resulting raster endpoint is:
+The resulting raster endpoints are:
 
 ```text
 /styles/explorer-<athlete-id>/512/{z}/{x}/{y}.png
+/styles/routes-<athlete-id>/512/{z}/{x}/{y}.png
 ```
 
 ## Dev
