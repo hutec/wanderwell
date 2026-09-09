@@ -1,0 +1,71 @@
+services:
+  traefik:
+    image: traefik:v3.7.13
+    command:
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.le.acme.tlschallenge=true"
+      - "--certificatesresolvers.le.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+
+  backend:
+    ports: !reset []
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`${PUBLIC_HOST}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=le"
+      - "traefik.http.routers.backend.middlewares=backend-strip"
+      - "traefik.http.middlewares.backend-strip.stripprefix.prefixes=/api"
+      - "traefik.http.services.backend.loadbalancer.server.port=3000"
+
+  frontend:
+    ports: !reset []
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`${PUBLIC_HOST}`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=le"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+
+  postgis:
+    ports: !reset []
+    labels:
+      - "traefik.enable=false"
+
+  vector-tileserver:
+    ports: !reset []
+    command: ["--cache-size", "0", "--base-path", "/vector"]
+    labels:
+      - "traefik.enable=false"
+
+  vinylcache:
+    ports: !reset []
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vector-tiles.rule=Host(`${PUBLIC_HOST}`) && PathPrefix(`/vector`)"
+      - "traefik.http.routers.vector-tiles.priority=100"
+      - "traefik.http.routers.vector-tiles.entrypoints=websecure"
+      - "traefik.http.routers.vector-tiles.tls.certresolver=le"
+      - "traefik.http.routers.vector-tiles.middlewares=vector-auth"
+      - "traefik.http.middlewares.vector-auth.forwardauth.address=http://backend:3000/auth/vector"
+      - "traefik.http.middlewares.vector-auth.forwardauth.authResponseHeaders=X-User-Id"
+      - "traefik.http.routers.raster-tiles.rule=Host(`${PUBLIC_HOST}`) && PathPrefix(`/raster`)"
+      - "traefik.http.routers.raster-tiles.priority=100"
+      - "traefik.http.routers.raster-tiles.entrypoints=websecure"
+      - "traefik.http.routers.raster-tiles.tls.certresolver=le"
+      - "traefik.http.routers.raster-tiles.middlewares=raster-auth"
+      - "traefik.http.middlewares.raster-auth.forwardauth.address=http://backend:3000/auth/raster"
+      - "traefik.http.services.vinylcache.loadbalancer.server.port=80"
+
+  raster-tileserver:
+    ports: !reset []
+    labels:
+      - "traefik.enable=false"
