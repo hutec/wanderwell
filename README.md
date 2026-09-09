@@ -24,6 +24,15 @@ the past with similar intents.
 | `TILE_CACHE_URL` | No | URL of the tile cache proxy for invalidation |
 | `ADMIN_USER_ID` | No | Strava user ID for admin access (required for `/update` endpoint) |
 
+And for the prod deployment:
+
+| Variable | Description |
+|---|---|
+| `PUBLIC_HOST` | Public host address |
+| `ACME_EMAIL` | Email address for the certificate |
+
+
+
 ## Setup
 
 ### Setup Strava Callback
