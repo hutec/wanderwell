@@ -23,6 +23,7 @@ the past with similar intents.
 | `SESSION_KEY` | Yes | Session key name |
 | `TILE_CACHE_URL` | No | URL of the tile cache proxy for invalidation |
 | `ADMIN_USER_ID` | No | Strava user ID for admin access (required for `/update` endpoint) |
+| `RASTER_TILE_TOKEN` | Yes, when using raster explorer tiles | Existing database-backed user token used by `RequireTokenAuth` for the style-bundle job |
 
 ## Setup
 
@@ -67,6 +68,30 @@ set +o allexport
 curl -G https://www.strava.com/api/v3/push_subscriptions \
   -d client_id=$STRAVA_CLIENT_ID \
   -d client_secret=$STRAVA_CLIENT_SECRET
+```
+
+## Raster TileServer GL styles
+
+TileServer GL loads styles from files at startup. The `tileserver-style-bundle`
+Compose job fetches an internally-authenticated, generated bundle from the
+backend and writes it to the `tileserver-data` volume before
+`raster-tileserver` starts. The backend generates `explorer-<athlete-id>` and
+`routes-<athlete-id>` styles for every athlete currently in the database.
+
+Set `RASTER_TILE_TOKEN` in `.env` to a valid `user_token.token` value. The
+bundle job authenticates with the existing `RequireTokenAuth` middleware. To
+include athletes added since the last startup, recreate the one-shot bundle job
+and raster server:
+
+```sh
+docker compose up --force-recreate tileserver-style-bundle raster-tileserver
+```
+
+The resulting raster endpoints are:
+
+```text
+/styles/explorer-<athlete-id>/512/{z}/{x}/{y}.png
+/styles/routes-<athlete-id>/512/{z}/{x}/{y}.png
 ```
 
 ## Dev

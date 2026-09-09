@@ -1,12 +1,14 @@
 {
   "version": 8,
-  "name": "Wanderwell Routes",
+  "name": "Wanderwell Routes {{.AthleteID}}",
   "center": [0, 0],
   "zoom": 2,
   "sources": {
     "user_routes": {
       "type": "vector",
-      "tiles": ["http://vector-tileserver:3000/route/{z}/{x}/{y}"],
+      "tiles": [
+        "http://vector-tileserver:3000/user_routes/{z}/{x}/{y}?user_id={{.AthleteID}}"
+      ],
       "minzoom": 0,
       "maxzoom": 22
     }
@@ -16,8 +18,7 @@
       "id": "user-routes-line",
       "type": "line",
       "source": "user_routes",
-      "source-layer": "route",
-      "filter": ["==", ["get", "user_id"], 41340942],
+      "source-layer": "user_routes",
       "layout": {
         "line-join": "round",
         "line-cap": "round"

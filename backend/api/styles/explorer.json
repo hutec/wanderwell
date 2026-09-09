@@ -1,13 +1,13 @@
 {
   "version": 8,
-  "name": "Wanderwell Explorer Tiles",
+  "name": "Wanderwell Explorer Tiles {{.AthleteID}}",
   "center": [0, 0],
   "zoom": 2,
   "sources": {
     "user_explorer_tiles": {
       "type": "vector",
       "tiles": [
-        "http://vector-tileserver:3000/user_explorer_tiles/{z}/{x}/{y}?user_id=41340942"
+        "http://vector-tileserver:3000/user_explorer_tiles/{z}/{x}/{y}?user_id={{.AthleteID}}"
       ],
       "minzoom": 0,
       "maxzoom": 14

@@ -192,6 +192,13 @@ func (s *Server) setupRoutes() {
 		r.Get("/update", s.updateCacheForUser)
 	})
 
+	// Internal route. The style-bundle job uses the same database-backed token
+	// authentication as raster tile requests.
+	s.router.Group(func(r chi.Router) {
+		r.Use(s.RequireTokenAuth)
+		r.Get(tileserverStyleBundlePath, s.getTileserverStyleBundle)
+	})
+
 	// Public routes
 	s.router.Get("/start", s.initiateAuthentication)
 	s.router.Get("/user_token_exchange", s.tokenExchange)
