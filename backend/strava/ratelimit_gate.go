@@ -51,6 +51,7 @@ type RateLimitGate struct {
 	read              gateQuota
 	quarterHourReset  time.Time
 	dailyReset        time.Time
+	cooldownUntil     time.Time // Global 429 cooldown; conservatively pauses writes too.
 	quarterHourIssued int
 	dailyIssued       int
 	changed           chan struct{} // Closed and replaced under mu on observation.
@@ -143,12 +144,13 @@ func NewRateLimitGate(config RateLimitGateConfig) (*RateLimitGate, error) {
 	return g, nil
 }
 
-// Acquire waits for all applicable budgets, then atomically reserves one request
-// in each and returns its receipt. It never partially reserves while waiting.
-// Permissions are not refunded, even if never sent. Callers must acquire once
-// per attempt, send promptly, and call Observe exactly once after completion,
-// passing nil headers on failure or if the permission was not used. Do not reuse
-// a receipt for retries. The gate retains no per-request records.
+// Acquire waits for the shared cooldown and all applicable budgets, then
+// atomically reserves one request in each and returns its receipt. It never
+// partially reserves while waiting. Permissions are not refunded, even if never
+// sent. Callers must acquire once per attempt, send promptly, and call Observe
+// exactly once after completion, passing nil if no response is available or the
+// permission was not used. Do not reuse receipts for retries. The gate retains
+// no per-request records.
 //
 // Unknown request kinds return an error without charging. Cancellation observed
 // before reservation returns ctx.Err() and no receipt; cancellation racing a
@@ -169,7 +171,8 @@ func (g *RateLimitGate) Acquire(ctx context.Context, kind RequestKind) (*RateLim
 			g.mu.Unlock()
 			return nil, err
 		}
-		g.resetExpired(time.Now().UTC())
+		now := time.Now().UTC()
+		g.resetExpired(now)
 
 		var reset time.Time
 		if g.overall.quarterHour.usage() >= g.overall.quarterHour.limit ||
@@ -181,6 +184,9 @@ func (g *RateLimitGate) Acquire(ctx context.Context, kind RequestKind) (*RateLim
 			// Midnight is at or after the next quarter-hour boundary. Wait for
 			// every exhausted budget, not just the first one to reset.
 			reset = g.dailyReset
+		}
+		if g.cooldownUntil.After(now) && g.cooldownUntil.After(reset) {
+			reset = g.cooldownUntil
 		}
 		if reset.IsZero() {
 			g.overall.quarterHour.reserve()
@@ -217,8 +223,15 @@ func (g *RateLimitGate) Acquire(ctx context.Context, kind RequestKind) (*RateLim
 	}
 }
 
-// Observe completes a reservation and reconciles the four Strava rate-limit
-// headers. Nil, zero, foreign, or already completed receipts return an error
+// Observe completes a reservation, reconciles the four Strava rate-limit
+// headers, and applies a shared cooldown on HTTP 429, even without usage headers
+// or on the final attempt. These changes are atomic before waking waiters. The
+// cooldown can only extend, is independent of quota resets, and applies to reads
+// and writes. A positive Retry-After delta-seconds or future HTTP date sets the
+// cooldown deadline; otherwise (including zero/past) the next UTC quarter-hour
+// is used. Nil responses finalize without refunding permission.
+//
+// Nil, zero, foreign, or already completed receipts return an error
 // without changing the gate. Missing/malformed pairs leave that known state
 // intact; limits and usages, and overall/read pairs, are parsed independently.
 // Valid read headers on a write can inform read budgets without settling a read
@@ -236,10 +249,14 @@ func (g *RateLimitGate) Acquire(ctx context.Context, kind RequestKind) (*RateLim
 // A request sent/processed across a reset may actually consume a different
 // server window. This gate cannot infer that, recover missing external usage,
 // or guarantee exact server accounting. Callers must send promptly; boundary
-// execution and retry policy belong to a future integration, not this gate.
-func (g *RateLimitGate) Observe(receipt *RateLimitReservation, headers http.Header) error {
+// execution cannot be attributed exactly by this gate.
+func (g *RateLimitGate) Observe(receipt *RateLimitReservation, response *http.Response) error {
 	if receipt == nil || receipt.state == nil || receipt.state.owner != g {
 		return fmt.Errorf("invalid or foreign strava rate-limit reservation")
+	}
+	var headers http.Header
+	if response != nil {
+		headers = response.Header
 	}
 	overall := parseGateObservation(headers, "X-RateLimit")
 	read := parseGateObservation(headers, "X-ReadRateLimit")
@@ -250,7 +267,13 @@ func (g *RateLimitGate) Observe(receipt *RateLimitReservation, headers http.Head
 		return fmt.Errorf("strava rate-limit reservation already completed")
 	}
 	r.completed = true
-	g.resetExpired(time.Now().UTC())
+	now := time.Now().UTC()
+	g.resetExpired(now)
+	if response != nil && response.StatusCode == http.StatusTooManyRequests {
+		if until := gateRetryAfter(headers.Get("Retry-After"), now); until.After(g.cooldownUntil) {
+			g.cooldownUntil = until
+		}
+	}
 	if r.quarterHourReset.Equal(g.quarterHourReset) {
 		g.overall.quarterHour.observe(overall, 0, r.quarterHourOrder, true)
 		g.read.quarterHour.observe(read, 0, r.quarterHourOrder, r.kind == RequestRead)
@@ -262,6 +285,21 @@ func (g *RateLimitGate) Observe(receipt *RateLimitReservation, headers http.Head
 	close(g.changed)
 	g.changed = make(chan struct{})
 	return nil
+}
+
+// gateRetryAfter honors positive delta-seconds (without duration overflow) or a
+// future HTTP date. Missing/malformed, negative, zero, and past/present values
+// fall back to the NEXT UTC quarter-hour, even exactly on a boundary: never spin
+// on immediate retries. This cooldown does not imply any quota is exhausted.
+func gateRetryAfter(value string, now time.Time) time.Time {
+	value = strings.TrimSpace(value)
+	if seconds, err := strconv.ParseUint(value, 10, 64); err == nil && seconds > 0 && seconds <= uint64(math.MaxInt64/int64(time.Second)) {
+		return now.Add(time.Duration(seconds) * time.Second)
+	}
+	if until, err := http.ParseTime(value); err == nil && until.After(now) {
+		return until
+	}
+	return now.UTC().Truncate(15 * time.Minute).Add(15 * time.Minute)
 }
 
 type gateObservation struct {
