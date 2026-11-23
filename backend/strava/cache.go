@@ -33,9 +33,9 @@ var _ cacheQueries = (*db.Queries)(nil)
 
 // activityAPI contains the Strava operations used by CacheUpdater.
 type activityAPI interface {
-	GetAthleteSummaryActivities(athleteID int64, maxPages int) ([]swagger.SummaryActivity, error)
-	GetDetailedActivityByID(activityID, athleteID int64) (*swagger.DetailedActivity, error)
-	UpdateActivityDescription(activityID, athleteID int64, description string) error
+	GetAthleteSummaryActivities(ctx context.Context, athleteID int64, maxPages int) ([]swagger.SummaryActivity, error)
+	GetDetailedActivityByID(ctx context.Context, activityID, athleteID int64) (*swagger.DetailedActivity, error)
+	UpdateActivityDescription(ctx context.Context, activityID, athleteID int64, description string) error
 }
 
 var _ activityAPI = (*StravaAPI)(nil)
@@ -60,7 +60,7 @@ func NewCacheUpdater(pool *pgxpool.Pool, cfg *config.Config, api *StravaAPI) *Ca
 // getAllUserActivities retrieves all activities for a user from the Strava API by handling pagination
 // maxPages limits the number of pages to fetch; if 0, fetch all pages
 func (cu *CacheUpdater) GetAllUserActivities(userID int64, maxPages int) ([]swagger.SummaryActivity, error) {
-	return cu.stravaAPI.GetAthleteSummaryActivities(userID, maxPages)
+	return cu.stravaAPI.GetAthleteSummaryActivities(context.Background(), userID, maxPages)
 }
 
 func (cu *CacheUpdater) GetUserIDs() ([]int64, error) {
@@ -93,7 +93,6 @@ func (cu *CacheUpdater) UpdateActivityCache(userID int64) error {
 		})
 		if err != nil {
 			if err == pgx.ErrNoRows {
-				// Can be a go-routine once rate limiting in concurrent calls is handled
 				cu.AddDetailedActivity(activity.Id, userID)
 				continue
 			}
@@ -123,7 +122,7 @@ func (cu *CacheUpdater) UpdateActivityCache(userID int64) error {
 // AddDetailedActivity fetches detailed activity information for a given activity ID and athlete ID,
 // and adds it to the database.
 func (cu *CacheUpdater) AddDetailedActivity(activityID int64, athleteID int64) error {
-	detailedActivity, err := cu.stravaAPI.GetDetailedActivityByID(activityID, athleteID)
+	detailedActivity, err := cu.stravaAPI.GetDetailedActivityByID(context.Background(), activityID, athleteID)
 	if err != nil {
 		return err
 	}
@@ -205,7 +204,7 @@ func (cu *CacheUpdater) WriteUniqueDistanceDescription(activityID int64, athlete
 	}
 
 	description := fmt.Sprintf("🧭 New ground: %.2f km", metres/1000.0)
-	if err := cu.stravaAPI.UpdateActivityDescription(activityID, athleteID, description); err != nil {
+	if err := cu.stravaAPI.UpdateActivityDescription(context.Background(), activityID, athleteID, description); err != nil {
 		slog.Error("Failed to write unique distance description to Strava", "activityID", activityID, "error", err)
 	}
 }

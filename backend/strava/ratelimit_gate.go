@@ -44,7 +44,7 @@ type RateLimitGateConfig struct {
 // RateLimitGate atomically reserves permission for Strava requests across
 // shared overall and read-specific quotas. It must be constructed with
 // NewRateLimitGate and must not be copied. It is safe for concurrent callers;
-// admission order is not guaranteed. Existing API calls do not use it automatically.
+// admission order is not guaranteed.
 type RateLimitGate struct {
 	mu                sync.Mutex
 	overall           gateQuota

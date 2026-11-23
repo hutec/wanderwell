@@ -35,7 +35,7 @@ type activityAPIStub struct {
 	getDetailedActivity func(int64, int64) (*swagger.DetailedActivity, error)
 }
 
-func (api *activityAPIStub) GetDetailedActivityByID(activityID, athleteID int64) (*swagger.DetailedActivity, error) {
+func (api *activityAPIStub) GetDetailedActivityByID(_ context.Context, activityID, athleteID int64) (*swagger.DetailedActivity, error) {
 	return api.getDetailedActivity(activityID, athleteID)
 }
 

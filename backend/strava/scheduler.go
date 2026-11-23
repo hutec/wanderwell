@@ -11,7 +11,6 @@ var ErrSchedulerClosed = errors.New("strava request scheduler is closed")
 
 // RequestScheduler executes individual requests using a fixed worker pool.
 // It must be constructed with NewRequestScheduler and must not be copied.
-// Existing Strava API calls do not use it automatically.
 type RequestScheduler struct {
 	mu      sync.Mutex
 	pending chan scheduledRequest // Accessed only under mu; never closed.

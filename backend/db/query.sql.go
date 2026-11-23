@@ -249,19 +249,21 @@ func (q *Queries) RouteExists(ctx context.Context, id int64) (bool, error) {
 
 const updateAthleteTokens = `-- name: UpdateAthleteTokens :exec
 UPDATE athlete
-SET access_token = $1,
-    expires_at   = $2
-WHERE id = $3
+SET access_token  = $1,
+    expires_at    = $2,
+    refresh_token = $3
+WHERE id = $4
 `
 
 type UpdateAthleteTokensParams struct {
-	AccessToken pgtype.Text `json:"access_token"`
-	ExpiresAt   pgtype.Int8 `json:"expires_at"`
-	ID          int64       `json:"id"`
+	AccessToken  pgtype.Text `json:"access_token"`
+	ExpiresAt    pgtype.Int8 `json:"expires_at"`
+	RefreshToken pgtype.Text `json:"refresh_token"`
+	ID           int64       `json:"id"`
 }
 
 func (q *Queries) UpdateAthleteTokens(ctx context.Context, arg UpdateAthleteTokensParams) error {
-	_, err := q.db.Exec(ctx, updateAthleteTokens, arg.AccessToken, arg.ExpiresAt, arg.ID)
+	_, err := q.db.Exec(ctx, updateAthleteTokens, arg.AccessToken, arg.ExpiresAt, arg.RefreshToken, arg.ID)
 	return err
 }
 
