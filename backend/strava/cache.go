@@ -18,9 +18,22 @@ import (
 	"github.com/twpayne/go-polyline"
 )
 
+// cacheQueries contains the database operations used by CacheUpdater.
+type cacheQueries interface {
+	ListAthleteIDs(ctx context.Context) ([]int64, error)
+	GetRouteName(ctx context.Context, arg db.GetRouteNameParams) (string, error)
+	UpdateRouteName(ctx context.Context, arg db.UpdateRouteNameParams) error
+	UpsertRoute(ctx context.Context, arg db.UpsertRouteParams) error
+	GetUserPreferences(ctx context.Context, userID int64) (db.UserPreference, error)
+	RouteExists(ctx context.Context, id int64) (bool, error)
+	GetRouteUniqueDistanceMeters(ctx context.Context, id int64) (float64, error)
+}
+
+var _ cacheQueries = (*db.Queries)(nil)
+
 type CacheUpdater struct {
 	db        *pgxpool.Pool
-	queries   *db.Queries
+	queries   cacheQueries
 	dbMutex   sync.Mutex
 	cfg       *config.Config
 	stravaAPI *StravaAPI
