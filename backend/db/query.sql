@@ -5,9 +5,10 @@ WHERE id = $1;
 
 -- name: UpdateAthleteTokens :exec
 UPDATE athlete
-SET access_token = $1,
-    expires_at   = $2
-WHERE id = $3;
+SET access_token  = $1,
+    expires_at    = $2,
+    refresh_token = $3
+WHERE id = $4;
 
 -- name: UpsertAthlete :exec
 INSERT INTO athlete (id, firstname, lastname, access_token, refresh_token, expires_at)

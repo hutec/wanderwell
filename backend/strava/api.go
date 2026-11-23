@@ -2,6 +2,7 @@ package strava
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -19,61 +20,96 @@ import (
 // API wrapper that handles authentication and requests to Strava's API.
 type StravaAPI struct {
 	queries   *db.Queries
-	dbMutex   sync.Mutex
+	tokenMu   sync.Mutex // Serializes token refreshes, since Strava rotates refresh tokens.
 	cfg       *config.Config
 	apiClient *swagger.APIClient
 	RateLimit *RateLimit
 }
 
 func NewStravaAPI(pool *pgxpool.Pool, cfg *config.Config) *StravaAPI {
-	apiConfig := swagger.NewConfiguration()
-	apiClient := swagger.NewAPIClient(apiConfig)
-	rateLimit := NewRateLimit()
-
 	return &StravaAPI{
 		queries:   db.New(pool),
 		cfg:       cfg,
-		apiClient: apiClient,
-		RateLimit: rateLimit,
+		apiClient: swagger.NewAPIClient(swagger.NewConfiguration()),
+		RateLimit: NewRateLimit(),
 	}
 }
 
 // GetAthleteAccessToken retrieves the access token for a given athlete.
-// If the token is expired it is automatically refreshed.
+// If the token is expired or about to expire it is automatically refreshed.
 func (api *StravaAPI) GetAthleteAccessToken(athleteID int64) (string, error) {
+	api.tokenMu.Lock()
+	defer api.tokenMu.Unlock()
+
 	row, err := api.queries.GetAthleteTokens(context.Background(), athleteID)
 	if err != nil {
 		return "", err
 	}
-	expiresAt := row.ExpiresAt.Int64
-	accessToken := row.AccessToken.String
-	refreshTokenStr := row.RefreshToken.String
-
-	// If token is expired or about to expire, refresh it
-	if expiresAt < time.Now().Unix() {
-		slog.Info("Refreshing token for user", "userID", athleteID)
-		tokenResp, err := refreshToken(refreshTokenStr, api.cfg.StravaClientID, api.cfg.StravaClientSecret)
-		if err != nil {
-			slog.Error("Failed to refresh token", "error", err)
-			return "", err
-		}
-		accessToken = tokenResp.AccessToken
-		expiresAt = tokenResp.ExpiresAt
-
-		// Update user in database
-		api.dbMutex.Lock()
-		err = api.queries.UpdateAthleteTokens(context.Background(), db.UpdateAthleteTokensParams{
-			ID:          athleteID,
-			AccessToken: pgtype.Text{String: accessToken, Valid: true},
-			ExpiresAt:   pgtype.Int8{Int64: expiresAt, Valid: true},
-		})
-		api.dbMutex.Unlock()
-		if err != nil {
-			slog.Error("Failed to update user", "error", err)
-			return "", err
-		}
+	if row.ExpiresAt.Int64 > time.Now().Add(time.Minute).Unix() {
+		return row.AccessToken.String, nil
 	}
-	return accessToken, nil
+
+	slog.Info("Refreshing token for user", "userID", athleteID)
+	tokenResp, err := refreshToken(row.RefreshToken.String, api.cfg.StravaClientID, api.cfg.StravaClientSecret)
+	if err != nil {
+		slog.Error("Failed to refresh token", "error", err)
+		return "", err
+	}
+	// Strava may rotate the refresh token; keep the old one if none was returned.
+	newRefreshToken := row.RefreshToken
+	if tokenResp.RefreshToken != "" {
+		newRefreshToken = pgtype.Text{String: tokenResp.RefreshToken, Valid: true}
+	}
+	err = api.queries.UpdateAthleteTokens(context.Background(), db.UpdateAthleteTokensParams{
+		ID:           athleteID,
+		AccessToken:  pgtype.Text{String: tokenResp.AccessToken, Valid: true},
+		ExpiresAt:    pgtype.Int8{Int64: tokenResp.ExpiresAt, Valid: true},
+		RefreshToken: newRefreshToken,
+	})
+	if err != nil {
+		slog.Error("Failed to update user", "error", err)
+		return "", err
+	}
+	return tokenResp.AccessToken, nil
+}
+
+const maxRequestAttempts = 3
+
+// doWithRateLimit sends a request once it fits in the rate limits, and retries
+// up to maxRequestAttempts times on HTTP 429 (Update starts a cooldown first).
+// Any non-200 response is returned as an error.
+func doWithRateLimit(rl *RateLimit, isRead bool, request func() (*http.Response, error)) error {
+	for attempt := 1; ; attempt++ {
+		ticket := rl.Acquire(isRead)
+		resp, err := request()
+		rl.Update(ticket, resp)
+		if resp != nil && resp.StatusCode == http.StatusTooManyRequests && attempt < maxRequestAttempts {
+			slog.Info("Strava rate limit exceeded, retrying", "attempt", attempt)
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if resp == nil {
+			return errors.New("no response from Strava")
+		}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("strava returned status %d", resp.StatusCode)
+		}
+		return nil
+	}
+}
+
+// do runs a rate-limited request on behalf of an athlete. The access token is
+// fetched after waiting for the rate limit, so it cannot expire during the wait.
+func (api *StravaAPI) do(athleteID int64, isRead bool, request func(ctx context.Context) (*http.Response, error)) error {
+	return doWithRateLimit(api.RateLimit, isRead, func() (*http.Response, error) {
+		accessToken, err := api.GetAthleteAccessToken(athleteID)
+		if err != nil {
+			return nil, err
+		}
+		return request(context.WithValue(context.Background(), swagger.ContextAccessToken, accessToken))
+	})
 }
 
 // GetAthleteSummaryActivities fetches all summary activities for a given athlete.
@@ -104,74 +140,33 @@ func (api *StravaAPI) GetAthleteSummaryActivities(athleteID int64, maxPages int)
 func (api *StravaAPI) GetAthleteSummaryActivitiesByPage(athleteID int64, page int32) ([]swagger.SummaryActivity, error) {
 	slog.Info("Getting activities for athlete by page", "athleteID", athleteID, "page", page)
 
-	accessToken, err := api.GetAthleteAccessToken(athleteID)
-	if err != nil {
-		return nil, err
-	}
-
-	limitType := api.RateLimit.IsRateLimitExceeded()
-	if limitType != RateLimitNone {
-		slog.Info("Rate limit exceeded", "limitType", limitType)
-		api.RateLimit.WaitForRateLimitReset(limitType)
-	}
-
-	var allActivities []swagger.SummaryActivity
 	opts := &swagger.ActivitiesApiGetLoggedInAthleteActivitiesOpts{
 		PerPage: optional.NewInt32(200), // Strava API maximum is 200
 		Page:    optional.NewInt32(page),
 	}
-	ctx := context.WithValue(context.Background(), swagger.ContextAccessToken, accessToken)
-	activities, resp, err := api.apiClient.ActivitiesApi.GetLoggedInAthleteActivities(ctx, opts)
-	api.RateLimit.UpdateRateLimit(resp)
+	var activities []swagger.SummaryActivity
+	err := api.do(athleteID, true, func(ctx context.Context) (resp *http.Response, err error) {
+		activities, resp, err = api.apiClient.ActivitiesApi.GetLoggedInAthleteActivities(ctx, opts)
+		return resp, err
+	})
 	if err != nil {
-		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
-			// This happens if the rate limit was exceeded during the request or just initialized
-			slog.Info("Rate limit exceeded on activity fetch", "athleteID", athleteID, "page", page)
-			// call recursively, since the rate limit has been updated, it will wait
-			return api.GetAthleteSummaryActivitiesByPage(athleteID, page)
-		}
 		slog.Error("Failed to get activities", "error", err)
 		return nil, fmt.Errorf("failed to get activities for page %d: %w", page, err)
 	}
-	if resp == nil {
-		return nil, fmt.Errorf("no response from Strava for activities page %d", page)
-	}
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("Failed to get activities", "status", resp.StatusCode)
-		return nil, fmt.Errorf("API request failed with status: %d", resp.StatusCode)
-	}
-
-	allActivities = append(allActivities, activities...)
-	return allActivities, nil
+	return activities, nil
 }
 
 // UpdateActivityDescription writes a new description to a Strava activity.
 func (api *StravaAPI) UpdateActivityDescription(activityID int64, athleteID int64, description string) error {
-	accessToken, err := api.GetAthleteAccessToken(athleteID)
-	if err != nil {
-		return err
-	}
-
-	limitType := api.RateLimit.IsRateLimitExceeded()
-	if limitType != RateLimitNone {
-		slog.Info("Rate limit exceeded", "limitType", limitType)
-		api.RateLimit.WaitForRateLimitReset(limitType)
-	}
-
-	ctx := context.WithValue(context.Background(), swagger.ContextAccessToken, accessToken)
 	opts := &swagger.ActivitiesApiUpdateActivityByIdOpts{
 		Body: optional.NewInterface(swagger.UpdatableActivity{Description: description}),
 	}
-	_, resp, err := api.apiClient.ActivitiesApi.UpdateActivityById(ctx, activityID, opts)
-	api.RateLimit.UpdateRateLimit(resp)
+	err := api.do(athleteID, false, func(ctx context.Context) (*http.Response, error) {
+		_, resp, err := api.apiClient.ActivitiesApi.UpdateActivityById(ctx, activityID, opts)
+		return resp, err
+	})
 	if err != nil {
 		return fmt.Errorf("failed to update activity description for ID %d: %w", activityID, err)
-	}
-	if resp == nil {
-		return fmt.Errorf("no response from Strava for activity ID %d", activityID)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("update activity description returned status %d for ID %d", resp.StatusCode, activityID)
 	}
 	slog.Info("Updated activity description on Strava", "activityID", activityID, "description", description)
 	return nil
@@ -180,38 +175,15 @@ func (api *StravaAPI) UpdateActivityDescription(activityID int64, athleteID int6
 // GetDetailedActivityByID fetches detailed information for a specific activity by its ID.
 func (api *StravaAPI) GetDetailedActivityByID(activityID int64, athleteID int64) (*swagger.DetailedActivity, error) {
 	slog.Info("Fetching detailed activity info", "activityID", activityID)
-	accessToken, err := api.GetAthleteAccessToken(athleteID)
+
+	var detailedActivity swagger.DetailedActivity
+	err := api.do(athleteID, true, func(ctx context.Context) (resp *http.Response, err error) {
+		detailedActivity, resp, err = api.apiClient.ActivitiesApi.GetActivityById(ctx, activityID, nil)
+		return resp, err
+	})
 	if err != nil {
-		return nil, err
-	}
-
-	limitType := api.RateLimit.IsRateLimitExceeded()
-	if limitType != RateLimitNone {
-		slog.Info("Rate limit exceeded", "limitType", limitType)
-		api.RateLimit.WaitForRateLimitReset(limitType)
-	}
-
-	ctx := context.WithValue(context.Background(), swagger.ContextAccessToken, accessToken)
-	detailedActivity, resp, err := api.apiClient.ActivitiesApi.GetActivityById(ctx, activityID, nil)
-	api.RateLimit.UpdateRateLimit(resp)
-	if err != nil {
-		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
-			// TODO: Add recursion limit to avoid infinite loops
-			slog.Info("Rate limit exceeded on detailed activity fetch", "activityID", activityID)
-			// call recursively, since the rate limit has been updated, it will wait
-			return api.GetDetailedActivityByID(activityID, athleteID)
-
-		}
 		slog.Error("Failed to get detailed activity", "activityID", activityID, "error", err)
 		return nil, fmt.Errorf("failed to get detailed activity for ID %d: %w", activityID, err)
 	}
-	if resp == nil {
-		return nil, fmt.Errorf("no response from Strava for detailed activity ID %d", activityID)
-	}
-	if resp.StatusCode != http.StatusOK {
-		slog.Error("Failed to get detailed activity", "activityID", activityID, "status", resp.StatusCode)
-		return nil, fmt.Errorf("API request for detailed activity failed with status: %d", resp.StatusCode)
-	}
-
 	return &detailedActivity, nil
 }
