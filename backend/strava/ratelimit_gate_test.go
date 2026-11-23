@@ -8,19 +8,19 @@ import (
 	"time"
 )
 
-func newTestRateLimitGate(t *testing.T, config RateLimitGateConfig) *RateLimitGate {
+func newTestRateLimitGate(t *testing.T, config rateLimitGateConfig) *rateLimitGate {
 	t.Helper()
-	g, err := NewRateLimitGate(config)
+	g, err := newRateLimitGate(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return g
 }
 
-func startGateAcquire(ctx context.Context, g *RateLimitGate, kind RequestKind) <-chan error {
+func startGateAcquire(ctx context.Context, g *rateLimitGate, kind requestKind) <-chan error {
 	done := make(chan error, 1)
 	go func() {
-		_, err := g.Acquire(ctx, kind)
+		_, err := g.acquire(ctx, kind)
 		done <- err
 	}()
 	return done
@@ -31,7 +31,7 @@ func assertGateWaiting(t *testing.T, done <-chan error) {
 	synctest.Wait()
 	select {
 	case err := <-done:
-		t.Fatalf("Acquire returned early: %v", err)
+		t.Fatalf("acquire returned early: %v", err)
 	default:
 	}
 }
@@ -42,14 +42,14 @@ func assertGateResult(t *testing.T, done <-chan error, want error) {
 	select {
 	case err := <-done:
 		if !errors.Is(err, want) {
-			t.Fatalf("Acquire error = %v, want %v", err, want)
+			t.Fatalf("acquire error = %v, want %v", err, want)
 		}
 	default:
-		t.Fatal("Acquire did not return")
+		t.Fatal("acquire did not return")
 	}
 }
 
-func assertGateUsage(t *testing.T, g *RateLimitGate, overallQuarterHour, overallDaily, readQuarterHour, readDaily int) {
+func assertGateUsage(t *testing.T, g *rateLimitGate, overallQuarterHour, overallDaily, readQuarterHour, readDaily int) {
 	t.Helper()
 	g.mu.Lock()
 	got := [4]int{g.overall.quarterHour.usage(), g.overall.daily.usage(), g.read.quarterHour.usage(), g.read.daily.usage()}
@@ -61,16 +61,16 @@ func assertGateUsage(t *testing.T, g *RateLimitGate, overallQuarterHour, overall
 
 func TestRateLimitGateAvailableCapacity(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		g := newTestRateLimitGate(t, RateLimitGateConfig{
-			Overall: RateLimitGateQuota{QuarterHourLimit: 5, DailyLimit: 10, QuarterHourUsage: 1, DailyUsage: 2},
-			Read:    RateLimitGateQuota{QuarterHourLimit: 3, DailyLimit: 8, DailyUsage: 1},
+		g := newTestRateLimitGate(t, rateLimitGateConfig{
+			Overall: rateLimitGateQuota{QuarterHourLimit: 5, DailyLimit: 10, QuarterHourUsage: 1, DailyUsage: 2},
+			Read:    rateLimitGateQuota{QuarterHourLimit: 3, DailyLimit: 8, DailyUsage: 1},
 		})
 		start := time.Now()
-		if _, err := g.Acquire(context.Background(), RequestRead); err != nil {
+		if _, err := g.acquire(context.Background(), requestRead); err != nil {
 			t.Fatal(err)
 		}
 		assertGateUsage(t, g, 2, 3, 1, 2)
-		if _, err := g.Acquire(context.Background(), RequestWrite); err != nil {
+		if _, err := g.acquire(context.Background(), requestWrite); err != nil {
 			t.Fatal(err)
 		}
 		assertGateUsage(t, g, 3, 4, 1, 2)
@@ -90,15 +90,15 @@ func TestRateLimitGateDailyExhaustion(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				midnight := time.Now().UTC().Truncate(24 * time.Hour).Add(48 * time.Hour)
 				time.Sleep(time.Until(midnight.Add(-20 * time.Minute))) // 23:40 UTC.
-				config := RateLimitGateConfig{
-					Overall: RateLimitGateQuota{QuarterHourLimit: 2, DailyLimit: 4, DailyUsage: 4},
-					Read:    RateLimitGateQuota{QuarterHourLimit: 2, DailyLimit: 4},
+				config := rateLimitGateConfig{
+					Overall: rateLimitGateQuota{QuarterHourLimit: 2, DailyLimit: 4, DailyUsage: 4},
+					Read:    rateLimitGateQuota{QuarterHourLimit: 2, DailyLimit: 4},
 				}
-				kind := RequestWrite
+				kind := requestWrite
 				if both {
 					config.Overall.QuarterHourUsage = 2
 					config.Read = config.Overall
-					kind = RequestRead
+					kind = requestRead
 				}
 				g := newTestRateLimitGate(t, config)
 				ctx, cancel := context.WithCancel(context.Background())
@@ -124,37 +124,37 @@ func TestRateLimitGateDailyExhaustion(t *testing.T) {
 func TestRateLimitGateReadWriteAccounting(t *testing.T) {
 	for _, test := range []struct {
 		name         string
-		config       RateLimitGateConfig
+		config       rateLimitGateConfig
 		writeAllowed bool
 	}{
 		{
 			name: "read quarter-hour exhausted",
-			config: RateLimitGateConfig{
-				Overall: RateLimitGateQuota{QuarterHourLimit: 3, DailyLimit: 4, QuarterHourUsage: 1, DailyUsage: 1},
-				Read:    RateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 4, QuarterHourUsage: 1, DailyUsage: 1},
+			config: rateLimitGateConfig{
+				Overall: rateLimitGateQuota{QuarterHourLimit: 3, DailyLimit: 4, QuarterHourUsage: 1, DailyUsage: 1},
+				Read:    rateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 4, QuarterHourUsage: 1, DailyUsage: 1},
 			},
 			writeAllowed: true,
 		},
 		{
 			name: "read daily exhausted",
-			config: RateLimitGateConfig{
-				Overall: RateLimitGateQuota{QuarterHourLimit: 3, DailyLimit: 4, QuarterHourUsage: 1, DailyUsage: 2},
-				Read:    RateLimitGateQuota{QuarterHourLimit: 3, DailyLimit: 2, QuarterHourUsage: 1, DailyUsage: 2},
+			config: rateLimitGateConfig{
+				Overall: rateLimitGateQuota{QuarterHourLimit: 3, DailyLimit: 4, QuarterHourUsage: 1, DailyUsage: 2},
+				Read:    rateLimitGateQuota{QuarterHourLimit: 3, DailyLimit: 2, QuarterHourUsage: 1, DailyUsage: 2},
 			},
 			writeAllowed: true,
 		},
 		{
 			name: "overall quarter-hour exhausted",
-			config: RateLimitGateConfig{
-				Overall: RateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 4, QuarterHourUsage: 1, DailyUsage: 1},
-				Read:    RateLimitGateQuota{QuarterHourLimit: 3, DailyLimit: 4},
+			config: rateLimitGateConfig{
+				Overall: rateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 4, QuarterHourUsage: 1, DailyUsage: 1},
+				Read:    rateLimitGateQuota{QuarterHourLimit: 3, DailyLimit: 4},
 			},
 		},
 		{
 			name: "overall daily exhausted",
-			config: RateLimitGateConfig{
-				Overall: RateLimitGateQuota{QuarterHourLimit: 3, DailyLimit: 2, QuarterHourUsage: 1, DailyUsage: 2},
-				Read:    RateLimitGateQuota{QuarterHourLimit: 3, DailyLimit: 4},
+			config: rateLimitGateConfig{
+				Overall: rateLimitGateQuota{QuarterHourLimit: 3, DailyLimit: 2, QuarterHourUsage: 1, DailyUsage: 2},
+				Read:    rateLimitGateQuota{QuarterHourLimit: 3, DailyLimit: 4},
 			},
 		},
 	} {
@@ -164,9 +164,9 @@ func TestRateLimitGateReadWriteAccounting(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 				start := time.Now()
-				read := startGateAcquire(ctx, g, RequestRead)
+				read := startGateAcquire(ctx, g, requestRead)
 				assertGateWaiting(t, read)
-				write := startGateAcquire(ctx, g, RequestWrite)
+				write := startGateAcquire(ctx, g, requestWrite)
 				overall, readQuota := test.config.Overall, test.config.Read
 				if test.writeAllowed {
 					assertGateResult(t, write, nil)
@@ -193,20 +193,20 @@ func TestRateLimitGateReadWriteAccounting(t *testing.T) {
 
 func TestRateLimitGateAlreadyCanceled(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		quota := RateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 1}
-		g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
+		quota := rateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 1}
+		g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		if receipt, err := g.Acquire(ctx, RequestRead); receipt != nil || !errors.Is(err, context.Canceled) {
-			t.Fatalf("Acquire error = %v, want context.Canceled", err)
+		if receipt, err := g.acquire(ctx, requestRead); receipt != (gateReservation{}) || !errors.Is(err, context.Canceled) {
+			t.Fatalf("acquire = %v, %v; want zero reservation and context.Canceled", receipt, err)
 		}
 		deadlineCtx, stop := context.WithDeadline(context.Background(), time.Now())
 		defer stop()
-		if receipt, err := g.Acquire(deadlineCtx, RequestWrite); receipt != nil || !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("Acquire error = %v, want context.DeadlineExceeded", err)
+		if receipt, err := g.acquire(deadlineCtx, requestWrite); receipt != (gateReservation{}) || !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("acquire = %v, %v; want zero reservation and context.DeadlineExceeded", receipt, err)
 		}
 		assertGateUsage(t, g, 0, 0, 0, 0)
-		if _, err := g.Acquire(context.Background(), RequestRead); err != nil {
+		if _, err := g.acquire(context.Background(), requestRead); err != nil {
 			t.Fatal(err)
 		}
 		assertGateUsage(t, g, 1, 1, 1, 1)
@@ -227,12 +227,12 @@ func TestRateLimitGateExactBoundaries(t *testing.T) {
 				day := time.Now().UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
 				boundary := day.Add(test.offset)
 				time.Sleep(time.Until(boundary) - time.Nanosecond)
-				quota := RateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 3, QuarterHourUsage: 1, DailyUsage: 2}
-				config := RateLimitGateConfig{Overall: quota, Read: quota}
+				quota := rateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 3, QuarterHourUsage: 1, DailyUsage: 2}
+				config := rateLimitGateConfig{Overall: quota, Read: quota}
 				g := newTestRateLimitGate(t, config)
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				done := startGateAcquire(ctx, g, RequestRead)
+				done := startGateAcquire(ctx, g, requestRead)
 				assertGateWaiting(t, done)
 				time.Sleep(time.Nanosecond)
 				assertGateResult(t, done, nil) // No one-second buffer.
@@ -245,7 +245,7 @@ func TestRateLimitGateExactBoundaries(t *testing.T) {
 				// Initial usage provided exactly on a boundary is for the NEW
 				// window, so it must not be discarded by the first acquisition.
 				fresh := newTestRateLimitGate(t, config)
-				blocked := startGateAcquire(ctx, fresh, RequestRead)
+				blocked := startGateAcquire(ctx, fresh, requestRead)
 				assertGateWaiting(t, blocked)
 				assertGateUsage(t, fresh, 1, 2, 1, 2)
 				cancel()
@@ -257,10 +257,10 @@ func TestRateLimitGateExactBoundaries(t *testing.T) {
 
 func TestRateLimitGateNormalizesIdleWindows(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		quota := RateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 1, QuarterHourUsage: 1, DailyUsage: 1}
-		g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
+		quota := rateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 1, QuarterHourUsage: 1, DailyUsage: 1}
+		g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
 		time.Sleep(72*time.Hour + 7*time.Minute)
-		if _, err := g.Acquire(context.Background(), RequestRead); err != nil {
+		if _, err := g.acquire(context.Background(), requestRead); err != nil {
 			t.Fatal(err)
 		}
 		assertGateUsage(t, g, 1, 1, 1, 1)
@@ -280,18 +280,18 @@ func TestRateLimitGateNormalizesIdleWindows(t *testing.T) {
 func TestNewRateLimitGateValidation(t *testing.T) {
 	for _, field := range []struct {
 		name string
-		set  func(*RateLimitGateConfig, int, int)
+		set  func(*rateLimitGateConfig, int, int)
 	}{
-		{"overall quarter-hour", func(c *RateLimitGateConfig, limit, usage int) {
+		{"overall quarter-hour", func(c *rateLimitGateConfig, limit, usage int) {
 			c.Overall.QuarterHourLimit, c.Overall.QuarterHourUsage = limit, usage
 		}},
-		{"overall daily", func(c *RateLimitGateConfig, limit, usage int) {
+		{"overall daily", func(c *rateLimitGateConfig, limit, usage int) {
 			c.Overall.DailyLimit, c.Overall.DailyUsage = limit, usage
 		}},
-		{"read quarter-hour", func(c *RateLimitGateConfig, limit, usage int) {
+		{"read quarter-hour", func(c *rateLimitGateConfig, limit, usage int) {
 			c.Read.QuarterHourLimit, c.Read.QuarterHourUsage = limit, usage
 		}},
-		{"read daily", func(c *RateLimitGateConfig, limit, usage int) {
+		{"read daily", func(c *rateLimitGateConfig, limit, usage int) {
 			c.Read.DailyLimit, c.Read.DailyUsage = limit, usage
 		}},
 	} {
@@ -307,10 +307,10 @@ func TestNewRateLimitGateValidation(t *testing.T) {
 			{"usage equals limit", 2, 2},
 		} {
 			t.Run(field.name+"/"+values.name, func(t *testing.T) {
-				quota := RateLimitGateQuota{QuarterHourLimit: 2, DailyLimit: 2}
-				config := RateLimitGateConfig{Overall: quota, Read: quota}
+				quota := rateLimitGateQuota{QuarterHourLimit: 2, DailyLimit: 2}
+				config := rateLimitGateConfig{Overall: quota, Read: quota}
 				field.set(&config, values.limit, values.usage)
-				g, err := NewRateLimitGate(config)
+				g, err := newRateLimitGate(config)
 				valid := values.limit > 0 && values.usage >= 0 && values.usage <= values.limit
 				if valid && (err != nil || g == nil) {
 					t.Fatalf("valid config rejected: gate = %v, error = %v", g, err)
@@ -321,15 +321,4 @@ func TestNewRateLimitGateValidation(t *testing.T) {
 			})
 		}
 	}
-}
-
-func TestRateLimitGateUnknownRequestKind(t *testing.T) {
-	quota := RateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 1}
-	g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
-	for _, kind := range []RequestKind{0, -1, RequestWrite + 1} {
-		if receipt, err := g.Acquire(context.Background(), kind); receipt != nil || err == nil {
-			t.Errorf("Acquire accepted unknown request kind %d", kind)
-		}
-	}
-	assertGateUsage(t, g, 0, 0, 0, 0)
 }

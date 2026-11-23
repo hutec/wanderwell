@@ -32,8 +32,8 @@ type StravaAPI struct {
 	tokenMu   sync.Mutex // Protects the entire token lookup/refresh/update sequence.
 	cfg       *config.Config
 	apiClient *swagger.APIClient
-	scheduler *RequestScheduler
-	gate      *RateLimitGate
+	scheduler *requestScheduler
+	gate      *rateLimitGate
 }
 
 // NewStravaAPI owns four workers and room for 64 pending requests. Quotas start
@@ -42,14 +42,14 @@ type StravaAPI struct {
 // startup estimate: restarting does not reset server quotas; headers and 429s
 // reconcile usage and impose cooldowns.
 func NewStravaAPI(pool *pgxpool.Pool, cfg *config.Config) (*StravaAPI, error) {
-	gate, err := NewRateLimitGate(RateLimitGateConfig{
-		Overall: RateLimitGateQuota{QuarterHourLimit: 200, DailyLimit: 2000},
-		Read:    RateLimitGateQuota{QuarterHourLimit: 100, DailyLimit: 1000},
+	gate, err := newRateLimitGate(rateLimitGateConfig{
+		Overall: rateLimitGateQuota{QuarterHourLimit: 200, DailyLimit: 2000},
+		Read:    rateLimitGateQuota{QuarterHourLimit: 100, DailyLimit: 1000},
 	})
 	if err != nil {
 		return nil, err
 	}
-	scheduler, err := NewRequestScheduler(4, 64)
+	scheduler, err := newRequestScheduler(4, 64)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func NewStravaAPI(pool *pgxpool.Pool, cfg *config.Config) (*StravaAPI, error) {
 // Shutdown cancels queued/active activity requests and waits for the workers.
 // It is safe to call repeatedly. The database remains owned by the caller.
 func (api *StravaAPI) Shutdown() {
-	api.scheduler.Shutdown()
+	api.scheduler.shutdown()
 }
 
 // GetAthleteAccessToken retrieves the access token for a given athlete.
@@ -135,7 +135,7 @@ func (api *StravaAPI) GetAthleteSummaryActivities(ctx context.Context, athleteID
 
 func (api *StravaAPI) GetAthleteSummaryActivitiesByPage(ctx context.Context, athleteID int64, page int32) ([]swagger.SummaryActivity, error) {
 	slog.Info("Getting activities for athlete by page", "athleteID", athleteID, "page", page)
-	return ExecuteStravaRequest(ctx, api.scheduler, api.gate, RequestRead, func(ctx context.Context) ([]swagger.SummaryActivity, *http.Response, error) {
+	return executeStravaRequest(ctx, api.scheduler, api.gate, requestRead, func(ctx context.Context) ([]swagger.SummaryActivity, *http.Response, error) {
 		accessToken, err := api.GetAthleteAccessToken(ctx, athleteID)
 		if err != nil {
 			return nil, nil, err
@@ -161,7 +161,7 @@ func (api *StravaAPI) GetAthleteSummaryActivitiesByPage(ctx context.Context, ath
 
 // UpdateActivityDescription writes a new description to a Strava activity.
 func (api *StravaAPI) UpdateActivityDescription(ctx context.Context, activityID int64, athleteID int64, description string) error {
-	_, err := ExecuteStravaRequest(ctx, api.scheduler, api.gate, RequestWrite, func(ctx context.Context) (swagger.DetailedActivity, *http.Response, error) {
+	_, err := executeStravaRequest(ctx, api.scheduler, api.gate, requestWrite, func(ctx context.Context) (swagger.DetailedActivity, *http.Response, error) {
 		accessToken, err := api.GetAthleteAccessToken(ctx, athleteID)
 		if err != nil {
 			return swagger.DetailedActivity{}, nil, err
@@ -192,7 +192,7 @@ func (api *StravaAPI) UpdateActivityDescription(ctx context.Context, activityID 
 // GetDetailedActivityByID fetches detailed information for a specific activity by its ID.
 func (api *StravaAPI) GetDetailedActivityByID(ctx context.Context, activityID int64, athleteID int64) (*swagger.DetailedActivity, error) {
 	slog.Info("Fetching detailed activity info", "activityID", activityID)
-	return ExecuteStravaRequest(ctx, api.scheduler, api.gate, RequestRead, func(ctx context.Context) (*swagger.DetailedActivity, *http.Response, error) {
+	return executeStravaRequest(ctx, api.scheduler, api.gate, requestRead, func(ctx context.Context) (*swagger.DetailedActivity, *http.Response, error) {
 		accessToken, err := api.GetAthleteAccessToken(ctx, athleteID)
 		if err != nil {
 			return nil, nil, err

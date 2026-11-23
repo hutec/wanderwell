@@ -10,24 +10,21 @@ import (
 	"time"
 )
 
-func acquireGateReceipt(t *testing.T, g *RateLimitGate, kind RequestKind) *RateLimitReservation {
+func acquireGateReceipt(t *testing.T, g *rateLimitGate, kind requestKind) gateReservation {
 	t.Helper()
 	start := time.Now()
-	r, err := g.Acquire(context.Background(), kind)
-	if err != nil || r == nil {
-		t.Fatalf("Acquire = %v, %v; want receipt and nil error", r, err)
+	r, err := g.acquire(context.Background(), kind)
+	if err != nil {
+		t.Fatalf("acquire = %v, %v; want reservation and nil error", r, err)
 	}
 	if !time.Now().Equal(start) {
-		t.Fatal("Acquire unexpectedly waited for a reset")
+		t.Fatal("acquire unexpectedly waited for a reset")
 	}
 	return r
 }
 
-func observeGate(t *testing.T, g *RateLimitGate, r *RateLimitReservation, headers http.Header) {
-	t.Helper()
-	if err := g.Observe(r, &http.Response{Header: headers}); err != nil {
-		t.Fatal(err)
-	}
+func observeGate(g *rateLimitGate, r gateReservation, headers http.Header) {
+	g.observe(r, &http.Response{Header: headers})
 }
 
 func gateHeaders(overallLimit, overallUsage, readLimit, readUsage string) http.Header {
@@ -45,7 +42,7 @@ func gateHeaders(overallLimit, overallUsage, readLimit, readUsage string) http.H
 	return headers
 }
 
-func assertGateLimits(t *testing.T, g *RateLimitGate, overallQuarterHour, overallDaily, readQuarterHour, readDaily int) {
+func assertGateLimits(t *testing.T, g *rateLimitGate, overallQuarterHour, overallDaily, readQuarterHour, readDaily int) {
 	t.Helper()
 	g.mu.Lock()
 	got := [4]int{g.overall.quarterHour.limit, g.overall.daily.limit, g.read.quarterHour.limit, g.read.daily.limit}
@@ -85,18 +82,15 @@ func TestRateLimitGateCooldownExtendsAcrossResets(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		midnight := time.Now().UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
 		time.Sleep(time.Until(midnight.Add(-time.Minute)))
-		quota := RateLimitGateQuota{QuarterHourLimit: 10, DailyLimit: 10}
-		g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
-		oldest := acquireGateReceipt(t, g, RequestRead)
-		middle := acquireGateReceipt(t, g, RequestRead)
-		newest := acquireGateReceipt(t, g, RequestRead)
-		observe := func(r *RateLimitReservation, until time.Time) {
-			t.Helper()
-			if err := g.Observe(r, &http.Response{StatusCode: http.StatusTooManyRequests, Header: http.Header{
+		quota := rateLimitGateQuota{QuarterHourLimit: 10, DailyLimit: 10}
+		g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
+		oldest := acquireGateReceipt(t, g, requestRead)
+		middle := acquireGateReceipt(t, g, requestRead)
+		newest := acquireGateReceipt(t, g, requestRead)
+		observe := func(r gateReservation, until time.Time) {
+			g.observe(r, &http.Response{StatusCode: http.StatusTooManyRequests, Header: http.Header{
 				"Retry-After": {until.Format(http.TimeFormat)},
-			}}); err != nil {
-				t.Fatal(err)
-			}
+			}})
 		}
 		observe(newest, midnight.Add(time.Minute))
 		observe(middle, midnight) // An older 429 cannot shorten the cooldown.
@@ -105,7 +99,7 @@ func TestRateLimitGateCooldownExtendsAcrossResets(t *testing.T) {
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		done := startGateAcquire(ctx, g, RequestWrite)
+		done := startGateAcquire(ctx, g, requestWrite)
 		assertGateWaiting(t, done)
 		time.Sleep(time.Until(midnight)) // Both quota windows reset, not cooldown.
 		assertGateWaiting(t, done)
@@ -166,18 +160,18 @@ func TestParseGatePair(t *testing.T) {
 
 func TestRateLimitGateObserveReadAndWrite(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		g := newTestRateLimitGate(t, RateLimitGateConfig{
-			Overall: RateLimitGateQuota{QuarterHourLimit: 100, DailyLimit: 200, QuarterHourUsage: 5, DailyUsage: 10},
-			Read:    RateLimitGateQuota{QuarterHourLimit: 60, DailyLimit: 100, QuarterHourUsage: 2, DailyUsage: 4},
+		g := newTestRateLimitGate(t, rateLimitGateConfig{
+			Overall: rateLimitGateQuota{QuarterHourLimit: 100, DailyLimit: 200, QuarterHourUsage: 5, DailyUsage: 10},
+			Read:    rateLimitGateQuota{QuarterHourLimit: 60, DailyLimit: 100, QuarterHourUsage: 2, DailyUsage: 4},
 		})
-		read := acquireGateReceipt(t, g, RequestRead)
-		observeGate(t, g, read, gateHeaders("80,150", "8,20", "50,90", "4,6"))
+		read := acquireGateReceipt(t, g, requestRead)
+		observeGate(g, read, gateHeaders("80,150", "8,20", "50,90", "4,6"))
 		assertGateUsage(t, g, 8, 20, 4, 6)
 		assertGateLimits(t, g, 80, 150, 50, 90)
 
-		write := acquireGateReceipt(t, g, RequestWrite)
+		write := acquireGateReceipt(t, g, requestWrite)
 		assertGateUsage(t, g, 9, 21, 4, 6)
-		observeGate(t, g, write, gateHeaders("90,160", "9,21", "55,95", "7,12"))
+		observeGate(g, write, gateHeaders("90,160", "9,21", "55,95", "7,12"))
 		// Write responses may report read usage, but cannot settle a read grant.
 		assertGateUsage(t, g, 9, 21, 7, 12)
 		assertGateLimits(t, g, 90, 160, 55, 95)
@@ -200,28 +194,28 @@ func TestRateLimitGateReconcilesConcurrentUsage(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				quota := RateLimitGateQuota{QuarterHourLimit: 100, DailyLimit: 100}
-				g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
-				a := acquireGateReceipt(t, g, RequestRead)
-				b := acquireGateReceipt(t, g, RequestRead)
+				quota := rateLimitGateQuota{QuarterHourLimit: 100, DailyLimit: 100}
+				g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
+				a := acquireGateReceipt(t, g, requestRead)
+				b := acquireGateReceipt(t, g, requestRead)
 				assertGateUsage(t, g, 2, 2, 2, 2)
 				first, second := a, b
 				if test.firstIsB {
 					first, second = b, a
 				}
-				observeGate(t, g, first, gateHeaders("", test.first, "", test.first))
+				observeGate(g, first, gateHeaders("", test.first, "", test.first))
 				n := test.intermediate
 				assertGateUsage(t, g, n, n, n, n)
-				var later *RateLimitReservation
+				var later gateReservation
 				if test.laterGrant {
-					later = acquireGateReceipt(t, g, RequestRead)
+					later = acquireGateReceipt(t, g, requestRead)
 					assertGateUsage(t, g, n+1, n+1, n+1, n+1)
 				}
-				observeGate(t, g, second, gateHeaders("", test.second, "", test.second))
+				observeGate(g, second, gateHeaders("", test.second, "", test.second))
 				n = test.final
 				assertGateUsage(t, g, n, n, n, n)
-				if later != nil {
-					observeGate(t, g, later, gateHeaders("", "13,13", "", "13,13"))
+				if test.laterGrant {
+					observeGate(g, later, gateHeaders("", "13,13", "", "13,13"))
 					assertGateUsage(t, g, 13, 13, 13, 13)
 				}
 			})
@@ -241,21 +235,17 @@ func TestRateLimitGateIncompleteUsageDoesNotRefund(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				quota := RateLimitGateQuota{QuarterHourLimit: 100, DailyLimit: 100}
-				g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
-				a := acquireGateReceipt(t, g, RequestRead)
-				observeGate(t, g, a, gateHeaders("", "10,10", "", "10,10"))
-				b := acquireGateReceipt(t, g, RequestRead)
-				observeGate(t, g, b, test.headers)
+				quota := rateLimitGateQuota{QuarterHourLimit: 100, DailyLimit: 100}
+				g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
+				a := acquireGateReceipt(t, g, requestRead)
+				observeGate(g, a, gateHeaders("", "10,10", "", "10,10"))
+				b := acquireGateReceipt(t, g, requestRead)
+				observeGate(g, b, test.headers)
 				assertGateUsage(t, g, 11, 11, 11, 11)
-				c := acquireGateReceipt(t, g, RequestRead)
+				c := acquireGateReceipt(t, g, requestRead)
 				// Valid newer headers cannot erase B's unconfirmed grant. The
 				// possible overlap stays conservative for the rest of the window.
-				observeGate(t, g, c, gateHeaders("", "12,12", "", "12,12"))
-				assertGateUsage(t, g, 13, 13, 13, 13)
-				if err := g.Observe(b, &http.Response{Header: gateHeaders("", "11,11", "", "11,11")}); err == nil {
-					t.Fatal("completion without usage did not finalize receipt")
-				}
+				observeGate(g, c, gateHeaders("", "12,12", "", "12,12"))
 				assertGateUsage(t, g, 13, 13, 13, 13)
 			})
 		})
@@ -264,20 +254,20 @@ func TestRateLimitGateIncompleteUsageDoesNotRefund(t *testing.T) {
 
 func TestRateLimitGateMalformedConcurrentCompletion(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		quota := RateLimitGateQuota{QuarterHourLimit: 4, DailyLimit: 4}
-		g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
-		a := acquireGateReceipt(t, g, RequestRead)
-		b := acquireGateReceipt(t, g, RequestRead)
-		observeGate(t, g, a, gateHeaders("", "1,bad", "", "1,bad"))
+		quota := rateLimitGateQuota{QuarterHourLimit: 4, DailyLimit: 4}
+		g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
+		a := acquireGateReceipt(t, g, requestRead)
+		b := acquireGateReceipt(t, g, requestRead)
+		observeGate(g, a, gateHeaders("", "1,bad", "", "1,bad"))
 		assertGateUsage(t, g, 2, 2, 2, 2)
-		c := acquireGateReceipt(t, g, RequestRead)
-		observeGate(t, g, b, gateHeaders("", "2,2", "", "2,2"))
+		c := acquireGateReceipt(t, g, requestRead)
+		observeGate(g, b, gateHeaders("", "2,2", "", "2,2"))
 		assertGateUsage(t, g, 4, 4, 4, 4) // Protect unknown A and outstanding C.
-		observeGate(t, g, c, gateHeaders("", "3,3", "", "3,3"))
+		observeGate(g, c, gateHeaders("", "3,3", "", "3,3"))
 		assertGateUsage(t, g, 4, 4, 4, 4) // Unknown A remains, but C is not added twice.
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		done := startGateAcquire(ctx, g, RequestWrite)
+		done := startGateAcquire(ctx, g, requestWrite)
 		assertGateWaiting(t, done)
 		cancel()
 		assertGateResult(t, done, context.Canceled)
@@ -286,21 +276,21 @@ func TestRateLimitGateMalformedConcurrentCompletion(t *testing.T) {
 
 func TestRateLimitGateHeaderPairsAreIndependent(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		quota := RateLimitGateQuota{QuarterHourLimit: 50, DailyLimit: 80, QuarterHourUsage: 2, DailyUsage: 3}
-		g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
-		a := acquireGateReceipt(t, g, RequestRead)
-		observeGate(t, g, a, gateHeaders("10,bad", "11,12", "20,30", "13,bad"))
+		quota := rateLimitGateQuota{QuarterHourLimit: 50, DailyLimit: 80, QuarterHourUsage: 2, DailyUsage: 3}
+		g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
+		a := acquireGateReceipt(t, g, requestRead)
+		observeGate(g, a, gateHeaders("10,bad", "11,12", "20,30", "13,bad"))
 		assertGateLimits(t, g, 50, 80, 20, 30)
 		assertGateUsage(t, g, 11, 12, 3, 4)
 
-		b := acquireGateReceipt(t, g, RequestRead)
-		observeGate(t, g, b, gateHeaders("9,10", "bad,13", "bad,40", "7,9"))
+		b := acquireGateReceipt(t, g, requestRead)
+		observeGate(g, b, gateHeaders("9,10", "bad,13", "bad,40", "7,9"))
 		assertGateLimits(t, g, 9, 10, 20, 30)
 		assertGateUsage(t, g, 12, 13, 8, 10)
 		// Usage above a newly reduced limit is exhausted, not reset or clamped.
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		done := startGateAcquire(ctx, g, RequestWrite)
+		done := startGateAcquire(ctx, g, requestWrite)
 		assertGateWaiting(t, done)
 		cancel()
 		assertGateResult(t, done, context.Canceled)
@@ -310,18 +300,18 @@ func TestRateLimitGateHeaderPairsAreIndependent(t *testing.T) {
 
 func TestRateLimitGateUsageSaturates(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		quota := RateLimitGateQuota{QuarterHourLimit: math.MaxInt, DailyLimit: math.MaxInt}
-		g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
-		a := acquireGateReceipt(t, g, RequestRead)
-		b := acquireGateReceipt(t, g, RequestRead)
+		quota := rateLimitGateQuota{QuarterHourLimit: math.MaxInt, DailyLimit: math.MaxInt}
+		g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
+		a := acquireGateReceipt(t, g, requestRead)
+		b := acquireGateReceipt(t, g, requestRead)
 		pair := strconv.Itoa(math.MaxInt) + "," + strconv.Itoa(math.MaxInt)
-		observeGate(t, g, a, gateHeaders(pair, pair, pair, pair))
+		observeGate(g, a, gateHeaders(pair, pair, pair, pair))
 		assertGateUsage(t, g, math.MaxInt, math.MaxInt, math.MaxInt, math.MaxInt)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		done := startGateAcquire(ctx, g, RequestWrite)
+		done := startGateAcquire(ctx, g, requestWrite)
 		assertGateWaiting(t, done)
-		observeGate(t, g, b, gateHeaders("", "0,0", "", "0,0"))
+		observeGate(g, b, gateHeaders("", "0,0", "", "0,0"))
 		assertGateWaiting(t, done)
 		assertGateUsage(t, g, math.MaxInt, math.MaxInt, math.MaxInt, math.MaxInt)
 		cancel()
@@ -329,73 +319,17 @@ func TestRateLimitGateUsageSaturates(t *testing.T) {
 	})
 }
 
-func TestRateLimitGateReceiptOwnershipAndIdempotency(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		quota := RateLimitGateQuota{QuarterHourLimit: 100, DailyLimit: 100}
-		g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
-		other := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
-		foreign := acquireGateReceipt(t, other, RequestRead)
-		headers := gateHeaders("20,20", "10,10", "20,20", "10,10")
-		limited := &http.Response{StatusCode: http.StatusTooManyRequests, Header: headers}
-		for _, invalid := range []*RateLimitReservation{nil, {}, foreign} {
-			if err := g.Observe(invalid, limited); err == nil {
-				t.Fatal("accepted invalid or foreign receipt")
-			}
-		}
-		if !g.cooldownUntil.IsZero() {
-			t.Fatal("invalid receipt applied a cooldown")
-		}
-		assertGateUsage(t, g, 0, 0, 0, 0)
-		assertGateLimits(t, g, 100, 100, 100, 100)
-		assertGateUsage(t, other, 1, 1, 1, 1)
-		observeGate(t, other, foreign, nil) // Foreign rejection did not finalize it.
-
-		r := acquireGateReceipt(t, g, RequestRead)
-		const observers = 12
-		results := make(chan error, observers)
-		start := make(chan struct{})
-		for range observers {
-			copy := *r // Copies must not bypass completion tracking.
-			go func() {
-				<-start
-				results <- g.Observe(&copy, &http.Response{Header: headers})
-			}()
-		}
-		close(start)
-		synctest.Wait()
-		successes := 0
-		for range observers {
-			if err := <-results; err == nil {
-				successes++
-			}
-		}
-		if successes != 1 {
-			t.Fatalf("successful completions = %d, want 1", successes)
-		}
-		assertGateUsage(t, g, 10, 10, 10, 10)
-		limited.Header = gateHeaders("1,1", "90,90", "1,1", "90,90")
-		if err := g.Observe(r, limited); err == nil {
-			t.Fatal("accepted duplicate completion")
-		}
-		if !g.cooldownUntil.IsZero() {
-			t.Fatal("duplicate receipt applied a cooldown")
-		}
-		assertGateUsage(t, g, 10, 10, 10, 10)
-		assertGateLimits(t, g, 20, 20, 20, 20)
-	})
-}
-
 func TestRateLimitGateIncreasedLimitsWakeWaiters(t *testing.T) {
 	for _, status := range []int{http.StatusOK, http.StatusTooManyRequests} {
 		t.Run(strconv.Itoa(status), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				quota := RateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 1}
-				g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
-				r := acquireGateReceipt(t, g, RequestRead)
+				quota := rateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 1}
+				g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
+				r := acquireGateReceipt(t, g, requestRead)
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				read := startGateAcquire(ctx, g, RequestRead)
-				write := startGateAcquire(ctx, g, RequestWrite)
+				read := startGateAcquire(ctx, g, requestRead)
+				write := startGateAcquire(ctx, g, requestWrite)
 				assertGateWaiting(t, read)
 				assertGateWaiting(t, write)
 				start := time.Now()
@@ -403,9 +337,7 @@ func TestRateLimitGateIncreasedLimitsWakeWaiters(t *testing.T) {
 				// but a simultaneous 429 must hold them until the cooldown ends.
 				headers := gateHeaders("3,3", "", "2,2", "")
 				headers.Set("Retry-After", "2")
-				if err := g.Observe(r, &http.Response{StatusCode: status, Header: headers}); err != nil {
-					t.Fatal(err)
-				}
+				g.observe(r, &http.Response{StatusCode: status, Header: headers})
 				if status == http.StatusTooManyRequests {
 					time.Sleep(2*time.Second - time.Nanosecond)
 					assertGateWaiting(t, read)
@@ -419,7 +351,7 @@ func TestRateLimitGateIncreasedLimitsWakeWaiters(t *testing.T) {
 				if !time.Now().Equal(start) {
 					t.Fatal("waiters did not resume at the expected deadline")
 				}
-				blocked := startGateAcquire(ctx, g, RequestWrite)
+				blocked := startGateAcquire(ctx, g, requestWrite)
 				assertGateWaiting(t, blocked)
 				cancel()
 				assertGateResult(t, blocked, context.Canceled)
@@ -430,17 +362,17 @@ func TestRateLimitGateIncreasedLimitsWakeWaiters(t *testing.T) {
 
 func TestRateLimitGateReconciledOverlapWakesWaiter(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		quota := RateLimitGateQuota{QuarterHourLimit: 13, DailyLimit: 13}
-		g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
-		a := acquireGateReceipt(t, g, RequestRead)
-		b := acquireGateReceipt(t, g, RequestRead)
-		observeGate(t, g, b, gateHeaders("", "12,12", "", "12,12"))
+		quota := rateLimitGateQuota{QuarterHourLimit: 13, DailyLimit: 13}
+		g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
+		a := acquireGateReceipt(t, g, requestRead)
+		b := acquireGateReceipt(t, g, requestRead)
+		observeGate(g, b, gateHeaders("", "12,12", "", "12,12"))
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		done := startGateAcquire(ctx, g, RequestRead)
+		done := startGateAcquire(ctx, g, requestRead)
 		assertGateWaiting(t, done)
 		start := time.Now()
-		observeGate(t, g, a, gateHeaders("", "11,11", "", "11,11"))
+		observeGate(g, a, gateHeaders("", "11,11", "", "11,11"))
 		assertGateResult(t, done, nil)
 		assertGateUsage(t, g, 13, 13, 13, 13)
 		if !time.Now().Equal(start) {
@@ -451,28 +383,28 @@ func TestRateLimitGateReconciledOverlapWakesWaiter(t *testing.T) {
 
 func TestRateLimitGateConcurrentAcquireObserve(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		quota := RateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 1}
-		g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
-		r := acquireGateReceipt(t, g, RequestRead)
+		quota := rateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 1}
+		g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
+		r := acquireGateReceipt(t, g, requestRead)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		const callers = 8
 		start := make(chan struct{})
-		results := make(chan error, callers+1)
+		results := make(chan error, callers)
 		for range callers {
 			go func() {
 				<-start
-				_, err := g.Acquire(ctx, RequestRead)
+				_, err := g.acquire(ctx, requestRead)
 				results <- err
 			}()
 		}
 		go func() {
 			<-start
-			results <- g.Observe(r, &http.Response{Header: gateHeaders("9,9", "1,1", "9,9", "1,1")})
+			g.observe(r, &http.Response{Header: gateHeaders("9,9", "1,1", "9,9", "1,1")})
 		}()
 		before := time.Now()
 		close(start) // Observation can race any waiter's check-and-subscribe.
-		for range callers + 1 {
+		for range callers {
 			assertGateResult(t, results, nil)
 		}
 		assertGateUsage(t, g, 9, 9, 9, 9)
@@ -486,18 +418,18 @@ func TestRateLimitGateOutOfOrderLimits(t *testing.T) {
 	for _, oldLimit := range []int{2, 20} {
 		t.Run(strconv.Itoa(oldLimit), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				quota := RateLimitGateQuota{QuarterHourLimit: 100, DailyLimit: 100}
-				g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
-				a := acquireGateReceipt(t, g, RequestRead)
-				b := acquireGateReceipt(t, g, RequestRead)
-				c := acquireGateReceipt(t, g, RequestRead)
-				observeGate(t, g, b, gateHeaders("8,8", "2,2", "8,8", "2,2"))
+				quota := rateLimitGateQuota{QuarterHourLimit: 100, DailyLimit: 100}
+				g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
+				a := acquireGateReceipt(t, g, requestRead)
+				b := acquireGateReceipt(t, g, requestRead)
+				c := acquireGateReceipt(t, g, requestRead)
+				observeGate(g, b, gateHeaders("8,8", "2,2", "8,8", "2,2"))
 				pair := strconv.Itoa(oldLimit) + "," + strconv.Itoa(oldLimit)
-				observeGate(t, g, a, gateHeaders(pair, "1,1", pair, "1,1"))
+				observeGate(g, a, gateHeaders(pair, "1,1", pair, "1,1"))
 				limit := min(oldLimit, 8) // Old reductions apply; old increases cannot reopen.
 				assertGateLimits(t, g, limit, limit, limit, limit)
 				assertGateUsage(t, g, 3, 3, 3, 3)
-				observeGate(t, g, c, gateHeaders("12,12", "3,3", "12,12", "3,3"))
+				observeGate(g, c, gateHeaders("12,12", "3,3", "12,12", "3,3"))
 				assertGateLimits(t, g, 12, 12, 12, 12)
 				assertGateUsage(t, g, 3, 3, 3, 3)
 			})
@@ -509,37 +441,34 @@ func TestRateLimitGateIndependentWindowAttribution(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		boundary := time.Now().UTC().Truncate(24 * time.Hour).Add(36*time.Hour + 15*time.Minute)
 		time.Sleep(time.Until(boundary) - time.Nanosecond)
-		quota := RateLimitGateQuota{QuarterHourLimit: 100, DailyLimit: 100}
-		g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
-		oldQuarter := acquireGateReceipt(t, g, RequestRead)
+		quota := rateLimitGateQuota{QuarterHourLimit: 100, DailyLimit: 100}
+		g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
+		oldQuarter := acquireGateReceipt(t, g, requestRead)
 		time.Sleep(time.Nanosecond)
-		current := acquireGateReceipt(t, g, RequestRead)
-		observeGate(t, g, current, gateHeaders("50,80", "3,10", "40,70", "2,8"))
+		current := acquireGateReceipt(t, g, requestRead)
+		observeGate(g, current, gateHeaders("50,80", "3,10", "40,70", "2,8"))
 		assertGateUsage(t, g, 3, 11, 2, 9) // Old request still unresolved for this day.
-		observeGate(t, g, oldQuarter, gateHeaders("99,60", "99,12", "99,50", "99,10"))
+		observeGate(g, oldQuarter, gateHeaders("99,60", "99,12", "99,50", "99,10"))
 		assertGateUsage(t, g, 3, 12, 2, 10)
 		assertGateLimits(t, g, 50, 60, 40, 50) // Ignore old short-term limits as well.
 
-		priorDay := acquireGateReceipt(t, g, RequestRead)
+		priorDay := acquireGateReceipt(t, g, requestRead)
 		midnight := boundary.Truncate(24 * time.Hour).Add(24 * time.Hour)
 		time.Sleep(time.Until(midnight))
-		current = acquireGateReceipt(t, g, RequestRead)
-		observeGate(t, g, current, gateHeaders("20,30", "4,5", "15,25", "2,3"))
+		current = acquireGateReceipt(t, g, requestRead)
+		observeGate(g, current, gateHeaders("20,30", "4,5", "15,25", "2,3"))
 		assertGateUsage(t, g, 4, 5, 2, 3)
-		observeGate(t, g, priorDay, gateHeaders("1,1", "1000,1000", "1,1", "1000,1000"))
+		observeGate(g, priorDay, gateHeaders("1,1", "1000,1000", "1,1", "1000,1000"))
 		assertGateUsage(t, g, 4, 5, 2, 3)
 		assertGateLimits(t, g, 20, 30, 15, 25)
-		if err := g.Observe(priorDay, nil); err == nil {
-			t.Fatal("stale completion was not finalized")
-		}
 
-		// Observe itself must normalize idle windows, not only Acquire.
-		idle := acquireGateReceipt(t, g, RequestRead)
+		// observe itself must normalize idle windows, not only acquire.
+		idle := acquireGateReceipt(t, g, requestRead)
 		time.Sleep(48 * time.Hour)
-		observeGate(t, g, idle, gateHeaders("1,1", "1000,1000", "1,1", "1000,1000"))
+		observeGate(g, idle, gateHeaders("1,1", "1000,1000", "1,1", "1000,1000"))
 		assertGateUsage(t, g, 0, 0, 0, 0)
 		assertGateLimits(t, g, 20, 30, 15, 25)
-		acquireGateReceipt(t, g, RequestRead)
+		acquireGateReceipt(t, g, requestRead)
 		assertGateUsage(t, g, 1, 1, 1, 1)
 	})
 }

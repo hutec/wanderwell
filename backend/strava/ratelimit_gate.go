@@ -11,41 +11,41 @@ import (
 	"time"
 )
 
-// RequestKind selects which Strava quotas a request consumes.
-type RequestKind int
+// requestKind selects which Strava quotas a request consumes.
+type requestKind int
 
 const (
-	// RequestRead consumes both overall and read-specific quotas.
-	RequestRead RequestKind = iota + 1
-	// RequestWrite consumes only overall quotas.
-	RequestWrite
+	// requestRead consumes both overall and read-specific quotas.
+	requestRead requestKind = iota + 1
+	// requestWrite consumes only overall quotas.
+	requestWrite
 )
 
-// RateLimitGateQuota configures the limits and initial usage for one quota.
+// rateLimitGateQuota configures the limits and initial usage for one quota.
 // Limits must be positive (zero does not mean unlimited or disabled), and each
 // usage must be between zero and its corresponding limit, inclusive. The
 // quarter-hour and daily values, and overall and read quotas, are validated
 // independently; no ordering between their limits or usages is required.
-type RateLimitGateQuota struct {
+type rateLimitGateQuota struct {
 	QuarterHourLimit int
 	DailyLimit       int
 	QuarterHourUsage int
 	DailyUsage       int
 }
 
-// RateLimitGateConfig supplies both required quotas. Initial usage belongs to
+// rateLimitGateConfig supplies both required quotas. Initial usage belongs to
 // the UTC quarter-hour and day containing the constructor's current time,
 // including when constructed exactly at a window boundary.
-type RateLimitGateConfig struct {
-	Overall RateLimitGateQuota
-	Read    RateLimitGateQuota
+type rateLimitGateConfig struct {
+	Overall rateLimitGateQuota
+	Read    rateLimitGateQuota
 }
 
-// RateLimitGate atomically reserves permission for Strava requests across
+// rateLimitGate atomically reserves permission for Strava requests across
 // shared overall and read-specific quotas. It must be constructed with
-// NewRateLimitGate and must not be copied. It is safe for concurrent callers;
+// newRateLimitGate and must not be copied. It is safe for concurrent callers;
 // admission order is not guaranteed.
-type RateLimitGate struct {
+type rateLimitGate struct {
 	mu                sync.Mutex
 	overall           gateQuota
 	read              gateQuota
@@ -101,28 +101,21 @@ func (b *gateBudget) reset() {
 	*b = gateBudget{limit: b.limit}
 }
 
-// RateLimitReservation is an opaque permission returned by Acquire. Copies
-// share completion state; only the issuing gate can observe it successfully.
-type RateLimitReservation struct {
-	state *gateReservation
-}
-
+// executeStravaRequest owns each reservation and observes it exactly once.
 type gateReservation struct {
-	owner            *RateLimitGate
-	kind             RequestKind
+	kind             requestKind
 	quarterHourReset time.Time
 	dailyReset       time.Time
 	quarterHourOrder int
 	dailyOrder       int
-	completed        bool // Protected by owner's mu.
 }
 
-// NewRateLimitGate validates explicit initial quotas and creates a gate without
+// newRateLimitGate validates explicit initial quotas and creates a gate without
 // starting any goroutines. Later observations can update limits and usage.
-func NewRateLimitGate(config RateLimitGateConfig) (*RateLimitGate, error) {
+func newRateLimitGate(config rateLimitGateConfig) (*rateLimitGate, error) {
 	for _, quota := range []struct {
 		name string
-		RateLimitGateQuota
+		rateLimitGateQuota
 	}{{"overall", config.Overall}, {"read", config.Read}} {
 		if quota.QuarterHourLimit <= 0 || quota.DailyLimit <= 0 {
 			return nil, fmt.Errorf("strava %s rate limits must be positive", quota.name)
@@ -132,55 +125,47 @@ func NewRateLimitGate(config RateLimitGateConfig) (*RateLimitGate, error) {
 			return nil, fmt.Errorf("strava %s usage must be between zero and its limit", quota.name)
 		}
 	}
-	newQuota := func(q RateLimitGateQuota) gateQuota {
+	newQuota := func(q rateLimitGateQuota) gateQuota {
 		return gateQuota{
 			quarterHour: gateBudget{limit: q.QuarterHourLimit, floor: q.QuarterHourUsage, server: q.QuarterHourUsage},
 			daily:       gateBudget{limit: q.DailyLimit, floor: q.DailyUsage, server: q.DailyUsage},
 		}
 	}
-	g := &RateLimitGate{changed: make(chan struct{})}
+	g := &rateLimitGate{changed: make(chan struct{})}
 	g.resetExpired(time.Now().UTC())
 	g.overall, g.read = newQuota(config.Overall), newQuota(config.Read)
 	return g, nil
 }
 
-// Acquire waits for the shared cooldown and all applicable budgets, then
-// atomically reserves one request in each and returns its receipt. It never
-// partially reserves while waiting. Permissions are not refunded, even if never
-// sent. Callers must acquire once per attempt, send promptly, and call Observe
-// exactly once after completion, passing nil if no response is available or the
-// permission was not used. Do not reuse receipts for retries. The gate retains
+// acquire waits for the shared cooldown and all applicable budgets, then
+// atomically reserves one request in each. It never partially reserves while
+// waiting. Permissions are not refunded, even if never sent. The gate retains
 // no per-request records.
 //
-// Unknown request kinds return an error without charging. Cancellation observed
-// before reservation returns ctx.Err() and no receipt; cancellation racing a
-// successful reservation may still return a receipt and nil error.
-//
+// Cancellation before reservation returns ctx.Err() and zero metadata;
+// cancellation racing a successful reservation may still return a reservation.
 // Quarter-hour windows reset at :00, :15, :30, and :45 UTC; daily windows reset
 // at 00:00 UTC. At the exact boundary the new window is available, with no buffer.
-func (g *RateLimitGate) Acquire(ctx context.Context, kind RequestKind) (*RateLimitReservation, error) {
+func (g *rateLimitGate) acquire(ctx context.Context, kind requestKind) (gateReservation, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if kind != RequestRead && kind != RequestWrite {
-		return nil, fmt.Errorf("unknown strava request kind: %d", kind)
+		return gateReservation{}, err
 	}
 	for {
 		g.mu.Lock()
 		if err := ctx.Err(); err != nil {
 			g.mu.Unlock()
-			return nil, err
+			return gateReservation{}, err
 		}
 		now := time.Now().UTC()
 		g.resetExpired(now)
 
 		var reset time.Time
 		if g.overall.quarterHour.usage() >= g.overall.quarterHour.limit ||
-			(kind == RequestRead && g.read.quarterHour.usage() >= g.read.quarterHour.limit) {
+			(kind == requestRead && g.read.quarterHour.usage() >= g.read.quarterHour.limit) {
 			reset = g.quarterHourReset
 		}
 		if g.overall.daily.usage() >= g.overall.daily.limit ||
-			(kind == RequestRead && g.read.daily.usage() >= g.read.daily.limit) {
+			(kind == requestRead && g.read.daily.usage() >= g.read.daily.limit) {
 			// Midnight is at or after the next quarter-hour boundary. Wait for
 			// every exhausted budget, not just the first one to reset.
 			reset = g.dailyReset
@@ -191,22 +176,22 @@ func (g *RateLimitGate) Acquire(ctx context.Context, kind RequestKind) (*RateLim
 		if reset.IsZero() {
 			g.overall.quarterHour.reserve()
 			g.overall.daily.reserve()
-			if kind == RequestRead {
+			if kind == requestRead {
 				g.read.quarterHour.reserve()
 				g.read.daily.reserve()
 			}
 			// Each counter is bounded by the overall window's local floor.
 			g.quarterHourIssued++
 			g.dailyIssued++
-			receipt := &RateLimitReservation{state: &gateReservation{
-				owner: g, kind: kind,
+			receipt := gateReservation{
+				kind:             kind,
 				quarterHourReset: g.quarterHourReset, dailyReset: g.dailyReset,
 				quarterHourOrder: g.quarterHourIssued, dailyOrder: g.dailyIssued,
-			}}
+			}
 			g.mu.Unlock()
 			return receipt, nil
 		}
-		changed := g.changed // Capture under mu, so Observe cannot lose a wakeup.
+		changed := g.changed // Capture under mu, so observe cannot lose a wakeup.
 		g.mu.Unlock()
 
 		// Each caller waits on its own timer, without holding mu or spawning
@@ -215,7 +200,7 @@ func (g *RateLimitGate) Acquire(ctx context.Context, kind RequestKind) (*RateLim
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return nil, ctx.Err()
+			return gateReservation{}, ctx.Err()
 		case <-changed:
 			timer.Stop()
 		case <-timer.C:
@@ -223,7 +208,7 @@ func (g *RateLimitGate) Acquire(ctx context.Context, kind RequestKind) (*RateLim
 	}
 }
 
-// Observe completes a reservation, reconciles the four Strava rate-limit
+// observe completes a reservation, reconciles the four Strava rate-limit
 // headers, and applies a shared cooldown on HTTP 429, even without usage headers
 // or on the final attempt. These changes are atomic before waking waiters. The
 // cooldown can only extend, is independent of quota resets, and applies to reads
@@ -231,12 +216,10 @@ func (g *RateLimitGate) Acquire(ctx context.Context, kind RequestKind) (*RateLim
 // cooldown deadline; otherwise (including zero/past) the next UTC quarter-hour
 // is used. Nil responses finalize without refunding permission.
 //
-// Nil, zero, foreign, or already completed receipts return an error
-// without changing the gate. Missing/malformed pairs leave that known state
-// intact; limits and usages, and overall/read pairs, are parsed independently.
-// Valid read headers on a write can inform read budgets without settling a read
-// grant. Nil/malformed usage never refunds permission. Completion is final, even
-// without headers: later calls cannot supply a missing observation.
+// Missing/malformed pairs leave the known state intact; limits and usages, and
+// overall/read pairs, are parsed independently. Valid read headers on a write
+// can inform read budgets without settling a read grant. Nil/malformed usage
+// never refunds permission.
 //
 // Headers have no request/window sequence number. Attribute each window to the
 // reservation's acquisition time, independently: ignore expired quarter-hour
@@ -250,10 +233,7 @@ func (g *RateLimitGate) Acquire(ctx context.Context, kind RequestKind) (*RateLim
 // server window. This gate cannot infer that, recover missing external usage,
 // or guarantee exact server accounting. Callers must send promptly; boundary
 // execution cannot be attributed exactly by this gate.
-func (g *RateLimitGate) Observe(receipt *RateLimitReservation, response *http.Response) error {
-	if receipt == nil || receipt.state == nil || receipt.state.owner != g {
-		return fmt.Errorf("invalid or foreign strava rate-limit reservation")
-	}
+func (g *rateLimitGate) observe(r gateReservation, response *http.Response) {
 	var headers http.Header
 	if response != nil {
 		headers = response.Header
@@ -262,11 +242,6 @@ func (g *RateLimitGate) Observe(receipt *RateLimitReservation, response *http.Re
 	read := parseGateObservation(headers, "X-ReadRateLimit")
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	r := receipt.state
-	if r.completed {
-		return fmt.Errorf("strava rate-limit reservation already completed")
-	}
-	r.completed = true
 	now := time.Now().UTC()
 	g.resetExpired(now)
 	if response != nil && response.StatusCode == http.StatusTooManyRequests {
@@ -276,15 +251,14 @@ func (g *RateLimitGate) Observe(receipt *RateLimitReservation, response *http.Re
 	}
 	if r.quarterHourReset.Equal(g.quarterHourReset) {
 		g.overall.quarterHour.observe(overall, 0, r.quarterHourOrder, true)
-		g.read.quarterHour.observe(read, 0, r.quarterHourOrder, r.kind == RequestRead)
+		g.read.quarterHour.observe(read, 0, r.quarterHourOrder, r.kind == requestRead)
 	}
 	if r.dailyReset.Equal(g.dailyReset) {
 		g.overall.daily.observe(overall, 1, r.dailyOrder, true)
-		g.read.daily.observe(read, 1, r.dailyOrder, r.kind == RequestRead)
+		g.read.daily.observe(read, 1, r.dailyOrder, r.kind == requestRead)
 	}
 	close(g.changed)
 	g.changed = make(chan struct{})
-	return nil
 }
 
 // gateRetryAfter honors positive delta-seconds (without duration overflow) or a
@@ -350,7 +324,7 @@ func (b *gateBudget) observe(o gateObservation, window, order int, charged bool)
 
 // resetExpired normalizes directly to the windows containing now (in UTC),
 // even after many idle windows. The caller must hold mu or own a new gate.
-func (g *RateLimitGate) resetExpired(now time.Time) {
+func (g *rateLimitGate) resetExpired(now time.Time) {
 	if !now.Before(g.quarterHourReset) {
 		g.overall.quarterHour.reset()
 		g.read.quarterHour.reset()

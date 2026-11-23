@@ -10,10 +10,10 @@ import (
 	"time"
 )
 
-func submitStravaRequest(ctx context.Context, s *RequestScheduler, g *RateLimitGate, request func(context.Context) (int, *http.Response, error)) <-chan requestOutcome {
+func submitStravaRequest(ctx context.Context, s *requestScheduler, g *rateLimitGate, request func(context.Context) (int, *http.Response, error)) <-chan requestOutcome {
 	done := make(chan requestOutcome, 1)
 	go func() {
-		value, err := ExecuteStravaRequest(ctx, s, g, RequestRead, request)
+		value, err := executeStravaRequest(ctx, s, g, requestRead, request)
 		done <- requestOutcome{value, err}
 	}()
 	return done
@@ -23,8 +23,8 @@ func TestExecuteStravaRequestConcurrentBudgetAndReset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const callers = 12
 		s := newTestRequestScheduler(t, callers, 2)
-		quota := RateLimitGateQuota{QuarterHourLimit: 2, DailyLimit: 20, QuarterHourUsage: 1, DailyUsage: 1}
-		g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
+		quota := rateLimitGateQuota{QuarterHourLimit: 2, DailyLimit: 20, QuarterHourUsage: 1, DailyUsage: 1}
+		g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		var starts atomic.Int32
@@ -71,7 +71,7 @@ func TestExecuteStravaRequestConcurrentBudgetAndReset(t *testing.T) {
 		if completed != 3 || starts.Load() != 3 {
 			t.Fatalf("completed %d requests, started %d; want 3 each", completed, starts.Load())
 		}
-		s.Shutdown()
+		s.shutdown()
 		assertGateUsage(t, g, 2, 4, 2, 4)
 		if !time.Now().Equal(reset) {
 			t.Fatal("cancellation/shutdown waited for another reset")
@@ -94,8 +94,8 @@ func TestExecuteStravaRequestObservesCompletion(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				s := newTestRequestScheduler(t, 1, 1)
-				quota := RateLimitGateQuota{QuarterHourLimit: test.limit, DailyLimit: 20}
-				g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
+				quota := rateLimitGateQuota{QuarterHourLimit: test.limit, DailyLimit: 20}
+				g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
 				started, release := make(chan struct{}), make(chan struct{})
 				var starts atomic.Int32
 				first := submitStravaRequest(context.Background(), s, g, func(ctx context.Context) (int, *http.Response, error) {
@@ -155,8 +155,8 @@ func TestExecuteStravaRequestSharedCooldown(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				s := newTestRequestScheduler(t, 2, 1)
-				quota := RateLimitGateQuota{QuarterHourLimit: 10, DailyLimit: 20}
-				g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
+				quota := rateLimitGateQuota{QuarterHourLimit: 10, DailyLimit: 20}
+				g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
 				deadline := time.Now().Add(2 * time.Second)
 				retryAfter := "2"
 				if date {
@@ -180,7 +180,7 @@ func TestExecuteStravaRequestSharedCooldown(t *testing.T) {
 				assertGateUsage(t, g, 1, 1, 1, 1)
 				other := make(chan requestOutcome, 1)
 				go func() {
-					value, err := ExecuteStravaRequest(context.Background(), s, g, RequestWrite, func(context.Context) (int, *http.Response, error) {
+					value, err := executeStravaRequest(context.Background(), s, g, requestWrite, func(context.Context) (int, *http.Response, error) {
 						otherStarts.Add(1)
 						return 99, nil, nil
 					})
@@ -224,8 +224,8 @@ func TestExecuteStravaRequestRetryLimit(t *testing.T) {
 				start := time.Now().UTC().Truncate(24 * time.Hour).Add(12*time.Hour + 7*time.Minute)
 				time.Sleep(time.Until(start))
 				s := newTestRequestScheduler(t, 1, 1)
-				quota := RateLimitGateQuota{QuarterHourLimit: 10, DailyLimit: 20}
-				config := RateLimitGateConfig{Overall: quota, Read: quota}
+				quota := rateLimitGateQuota{QuarterHourLimit: 10, DailyLimit: 20}
+				config := rateLimitGateConfig{Overall: quota, Read: quota}
 				if test.dailyQuota == "read" {
 					config.Read.DailyLimit = 1
 				} else if test.dailyQuota == "overall" {
@@ -314,13 +314,13 @@ func TestExecuteStravaRequestInterruptsGateWait(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				s := newTestRequestScheduler(t, 1, 1)
-				quota := RateLimitGateQuota{QuarterHourLimit: 2, DailyLimit: 20, QuarterHourUsage: 2, DailyUsage: 2}
+				quota := rateLimitGateQuota{QuarterHourLimit: 2, DailyLimit: 20, QuarterHourUsage: 2, DailyUsage: 2}
 				wantStarts, wantUsage := int32(0), 2
 				if test.cooldown {
 					quota.QuarterHourUsage, quota.DailyUsage = 0, 0
 					wantStarts, wantUsage = 1, 1
 				}
-				g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
+				g := newTestRateLimitGate(t, rateLimitGateConfig{Overall: quota, Read: quota})
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 				start := time.Now()
@@ -329,7 +329,7 @@ func TestExecuteStravaRequestInterruptsGateWait(t *testing.T) {
 					starts.Add(1)
 					return 1, &http.Response{StatusCode: http.StatusTooManyRequests, Header: http.Header{"Retry-After": {"3600"}}}, nil
 				})
-				assertPendingRequests(t, s, 0) // The only worker is waiting inside Acquire.
+				assertPendingRequests(t, s, 0) // The only worker is waiting inside acquire.
 				select {
 				case got := <-done:
 					t.Fatalf("gate waiter returned early: %+v", got)
@@ -338,11 +338,11 @@ func TestExecuteStravaRequestInterruptsGateWait(t *testing.T) {
 				wantErr := context.Canceled
 				if test.shutdown {
 					wantErr = ErrSchedulerClosed
-					s.Shutdown()
+					s.shutdown()
 				} else {
 					cancel()
 					// Prove the worker was released by caller cancellation alone.
-					if _, err := ExecuteRequest(context.Background(), s, func(context.Context) (int, error) {
+					if _, err := executeRequest(context.Background(), s, func(context.Context) (int, error) {
 						return 0, nil
 					}); err != nil {
 						t.Fatal(err)

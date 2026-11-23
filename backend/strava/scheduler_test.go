@@ -16,26 +16,26 @@ type requestOutcome struct {
 	err   error
 }
 
-func submitRequest(ctx context.Context, s *RequestScheduler, request func(context.Context) (int, error)) <-chan requestOutcome {
+func submitRequest(ctx context.Context, s *requestScheduler, request func(context.Context) (int, error)) <-chan requestOutcome {
 	done := make(chan requestOutcome, 1)
 	go func() {
-		value, err := ExecuteRequest(ctx, s, request)
+		value, err := executeRequest(ctx, s, request)
 		done <- requestOutcome{value, err}
 	}()
 	return done
 }
 
-func newTestRequestScheduler(t *testing.T, workers, capacity int) *RequestScheduler {
+func newTestRequestScheduler(t *testing.T, workers, capacity int) *requestScheduler {
 	t.Helper()
-	s, err := NewRequestScheduler(workers, capacity)
+	s, err := newRequestScheduler(workers, capacity)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(s.Shutdown)
+	t.Cleanup(s.shutdown)
 	return s
 }
 
-func assertPendingRequests(t *testing.T, s *RequestScheduler, want int) {
+func assertPendingRequests(t *testing.T, s *requestScheduler, want int) {
 	t.Helper()
 	synctest.Wait()
 	s.mu.Lock()
@@ -47,7 +47,7 @@ func assertPendingRequests(t *testing.T, s *RequestScheduler, want int) {
 }
 
 // holdRequest occupies one worker until release is closed or shutdown cancels it.
-func holdRequest(s *RequestScheduler) (release chan struct{}, done <-chan requestOutcome) {
+func holdRequest(s *requestScheduler) (release chan struct{}, done <-chan requestOutcome) {
 	release = make(chan struct{})
 	started := make(chan struct{})
 	done = submitRequest(context.Background(), s, func(ctx context.Context) (int, error) {
@@ -65,9 +65,9 @@ func holdRequest(s *RequestScheduler) (release chan struct{}, done <-chan reques
 
 func TestNewRequestSchedulerInvalidSettings(t *testing.T) {
 	for _, settings := range [][2]int{{0, 1}, {-1, 1}, {1, 0}, {1, -1}} {
-		if s, err := NewRequestScheduler(settings[0], settings[1]); err == nil {
-			s.Shutdown()
-			t.Errorf("NewRequestScheduler(%d, %d) succeeded", settings[0], settings[1])
+		if s, err := newRequestScheduler(settings[0], settings[1]); err == nil {
+			s.shutdown()
+			t.Errorf("newRequestScheduler(%d, %d) succeeded", settings[0], settings[1])
 		}
 	}
 }
@@ -75,11 +75,11 @@ func TestNewRequestSchedulerInvalidSettings(t *testing.T) {
 func TestRequestSchedulerResults(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s := newTestRequestScheduler(t, 3, 2)
-		value, err := ExecuteRequest(context.Background(), s, func(context.Context) (string, error) {
+		value, err := executeRequest(context.Background(), s, func(context.Context) (string, error) {
 			return "typed result", nil
 		})
 		if value != "typed result" || err != nil {
-			t.Fatalf("ExecuteRequest = (%q, %v)", value, err)
+			t.Fatalf("executeRequest = (%q, %v)", value, err)
 		}
 
 		const callers = 24
@@ -160,7 +160,7 @@ func TestRequestSchedulerCanceledQueuedRequest(t *testing.T) {
 			t.Fatal(got.err)
 		}
 		// A subsequent result proves the worker has passed the canceled entry.
-		if _, err := ExecuteRequest(context.Background(), s, func(context.Context) (int, error) {
+		if _, err := executeRequest(context.Background(), s, func(context.Context) (int, error) {
 			return 3, nil
 		}); err != nil {
 			t.Fatal(err)
@@ -239,7 +239,7 @@ func TestRequestSchedulerCallerContext(t *testing.T) {
 			t.Fatalf("callback error = %v, want context.Canceled", err)
 		}
 		// An already canceled caller must not execute even with queue space.
-		if _, err := ExecuteRequest(ctx, s, func(context.Context) (int, error) {
+		if _, err := executeRequest(ctx, s, func(context.Context) (int, error) {
 			t.Error("already canceled request executed")
 			return 0, nil
 		}); !errors.Is(err, context.Canceled) {
@@ -275,7 +275,7 @@ func TestRequestSchedulerShutdown(t *testing.T) {
 		stopped := make(chan struct{}, shutdownCallers)
 		for range shutdownCallers {
 			go func() {
-				s.Shutdown()
+				s.shutdown()
 				stopped <- struct{}{}
 			}()
 		}
@@ -295,14 +295,14 @@ func TestRequestSchedulerShutdown(t *testing.T) {
 			t.Fatal("shutdown returned before callback exited")
 		default:
 		}
-		if _, err := ExecuteRequest(context.Background(), s, unexpected); !errors.Is(err, ErrSchedulerClosed) {
+		if _, err := executeRequest(context.Background(), s, unexpected); !errors.Is(err, ErrSchedulerClosed) {
 			t.Fatalf("post-shutdown request error = %v, want ErrSchedulerClosed", err)
 		}
 		release()
 		for range shutdownCallers {
 			<-stopped
 		}
-		s.Shutdown()
+		s.shutdown()
 	})
 }
 
@@ -317,7 +317,7 @@ func TestRequestSchedulerConcurrentSubmissionAndShutdown(t *testing.T) {
 			go func() {
 				defer callersDone.Done()
 				<-start
-				value, err := ExecuteRequest(context.Background(), s, func(context.Context) (int, error) {
+				value, err := executeRequest(context.Background(), s, func(context.Context) (int, error) {
 					return i, nil
 				})
 				if err != nil && !errors.Is(err, ErrSchedulerClosed) {
@@ -330,10 +330,10 @@ func TestRequestSchedulerConcurrentSubmissionAndShutdown(t *testing.T) {
 		}
 		go func() {
 			<-start
-			s.Shutdown()
+			s.shutdown()
 		}()
 		close(start)
 		callersDone.Wait()
-		s.Shutdown()
+		s.shutdown()
 	})
 }

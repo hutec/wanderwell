@@ -6,12 +6,12 @@ import (
 	"sync"
 )
 
-// ErrSchedulerClosed is returned when a request scheduler has shut down.
+// ErrSchedulerClosed is returned by activity requests after StravaAPI.Shutdown.
 var ErrSchedulerClosed = errors.New("strava request scheduler is closed")
 
-// RequestScheduler executes individual requests using a fixed worker pool.
-// It must be constructed with NewRequestScheduler and must not be copied.
-type RequestScheduler struct {
+// requestScheduler executes individual requests using a fixed worker pool.
+// It must be constructed with newRequestScheduler and must not be copied.
+type requestScheduler struct {
 	mu      sync.Mutex
 	pending chan scheduledRequest // Accessed only under mu; never closed.
 	changed chan struct{}         // Replaced under mu whenever the queue changes.
@@ -25,16 +25,16 @@ type scheduledRequest struct {
 	run func(context.Context)
 }
 
-// NewRequestScheduler starts a fixed number of workers with room for
+// newRequestScheduler starts a fixed number of workers with room for
 // pendingCapacity waiting requests, in addition to executing requests. Both
 // settings must be positive. Callers wait for space when the queue is full;
 // the scheduler does not create goroutines for pending or blocked requests.
-func NewRequestScheduler(workers, pendingCapacity int) (*RequestScheduler, error) {
+func newRequestScheduler(workers, pendingCapacity int) (*requestScheduler, error) {
 	if workers <= 0 || pendingCapacity <= 0 {
 		return nil, errors.New("strava scheduler workers and pending capacity must be positive")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &RequestScheduler{
+	s := &requestScheduler{
 		pending: make(chan scheduledRequest, pendingCapacity),
 		changed: make(chan struct{}),
 		ctx:     ctx,
@@ -47,17 +47,17 @@ func NewRequestScheduler(workers, pendingCapacity int) (*RequestScheduler, error
 	return s, nil
 }
 
-// ExecuteRequest waits for queue space, executes request at most once, and returns its
+// executeRequest waits for queue space, executes request at most once, and returns its
 // typed result and error to this caller. The callback receives a context that
 // preserves ctx's values and deadline and is canceled by either ctx or shutdown.
 // Cancellation while queued prevents execution; canceled entries occupy space
 // until a worker dequeues them. Waiting for space and completion both respect ctx.
 // If completion races cancellation or shutdown, either outcome may be returned.
 //
-// Callbacks must cooperate with cancellation so Shutdown can finish. They must
-// not call Shutdown or synchronously submit more work to the same scheduler:
+// Callbacks must cooperate with cancellation so shutdown can finish. They must
+// not call shutdown or synchronously submit more work to the same scheduler:
 // doing so can deadlock the worker pool.
-func ExecuteRequest[T any](ctx context.Context, s *RequestScheduler, request func(context.Context) (T, error)) (T, error) {
+func executeRequest[T any](ctx context.Context, s *requestScheduler, request func(context.Context) (T, error)) (T, error) {
 	type result struct {
 		value T
 		err   error
@@ -85,7 +85,7 @@ func ExecuteRequest[T any](ctx context.Context, s *RequestScheduler, request fun
 	}
 }
 
-func (s *RequestScheduler) enqueue(ctx context.Context, job scheduledRequest) error {
+func (s *requestScheduler) enqueue(ctx context.Context, job scheduledRequest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for {
@@ -111,7 +111,7 @@ func (s *RequestScheduler) enqueue(ctx context.Context, job scheduledRequest) er
 	}
 }
 
-func (s *RequestScheduler) next() (scheduledRequest, bool) {
+func (s *requestScheduler) next() (scheduledRequest, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for {
@@ -132,12 +132,12 @@ func (s *RequestScheduler) next() (scheduledRequest, bool) {
 }
 
 // notify broadcasts under mu, so no queue change or shutdown wakeup can be lost.
-func (s *RequestScheduler) notify() {
+func (s *requestScheduler) notify() {
 	close(s.changed)
 	s.changed = make(chan struct{})
 }
 
-func (s *RequestScheduler) work() {
+func (s *requestScheduler) work() {
 	defer s.workers.Done()
 	for {
 		job, ok := s.next()
@@ -155,11 +155,11 @@ func (s *RequestScheduler) work() {
 	}
 }
 
-// Shutdown rejects further submissions, releases queued and blocked callers,
+// shutdown rejects further submissions, releases queued and blocked callers,
 // cancels active callback contexts, and waits for all workers to exit. It is safe
 // to call concurrently and repeatedly. Callbacks must honor cancellation for
-// Shutdown to return; callers are released without waiting for those callbacks.
-func (s *RequestScheduler) Shutdown() {
+// shutdown to return; callers are released without waiting for those callbacks.
+func (s *requestScheduler) shutdown() {
 	s.mu.Lock()
 	if s.ctx.Err() == nil {
 		s.cancel()
