@@ -19,7 +19,10 @@ func newTestRateLimitGate(t *testing.T, config RateLimitGateConfig) *RateLimitGa
 
 func startGateAcquire(ctx context.Context, g *RateLimitGate, kind RequestKind) <-chan error {
 	done := make(chan error, 1)
-	go func() { done <- g.Acquire(ctx, kind) }()
+	go func() {
+		_, err := g.Acquire(ctx, kind)
+		done <- err
+	}()
 	return done
 }
 
@@ -49,7 +52,7 @@ func assertGateResult(t *testing.T, done <-chan error, want error) {
 func assertGateUsage(t *testing.T, g *RateLimitGate, overallQuarterHour, overallDaily, readQuarterHour, readDaily int) {
 	t.Helper()
 	g.mu.Lock()
-	got := [4]int{g.overall.QuarterHourUsage, g.overall.DailyUsage, g.read.QuarterHourUsage, g.read.DailyUsage}
+	got := [4]int{g.overall.quarterHour.usage(), g.overall.daily.usage(), g.read.quarterHour.usage(), g.read.daily.usage()}
 	g.mu.Unlock()
 	if want := [4]int{overallQuarterHour, overallDaily, readQuarterHour, readDaily}; got != want {
 		t.Fatalf("usage [overall quarter-hour/daily, read quarter-hour/daily] = %v, want %v", got, want)
@@ -63,11 +66,11 @@ func TestRateLimitGateAvailableCapacity(t *testing.T) {
 			Read:    RateLimitGateQuota{QuarterHourLimit: 3, DailyLimit: 8, DailyUsage: 1},
 		})
 		start := time.Now()
-		if err := g.Acquire(context.Background(), RequestRead); err != nil {
+		if _, err := g.Acquire(context.Background(), RequestRead); err != nil {
 			t.Fatal(err)
 		}
 		assertGateUsage(t, g, 2, 3, 1, 2)
-		if err := g.Acquire(context.Background(), RequestWrite); err != nil {
+		if _, err := g.Acquire(context.Background(), RequestWrite); err != nil {
 			t.Fatal(err)
 		}
 		assertGateUsage(t, g, 3, 4, 1, 2)
@@ -89,7 +92,8 @@ func TestRateLimitGateConcurrentReservationsAndReset(t *testing.T) {
 		for range callers {
 			go func() {
 				<-start
-				results <- g.Acquire(ctx, RequestRead)
+				_, err := g.Acquire(ctx, RequestRead)
+				results <- err
 			}()
 		}
 		close(start)
@@ -241,16 +245,16 @@ func TestRateLimitGateAlreadyCanceled(t *testing.T) {
 		g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		if err := g.Acquire(ctx, RequestRead); !errors.Is(err, context.Canceled) {
+		if receipt, err := g.Acquire(ctx, RequestRead); receipt != nil || !errors.Is(err, context.Canceled) {
 			t.Fatalf("Acquire error = %v, want context.Canceled", err)
 		}
 		deadlineCtx, stop := context.WithDeadline(context.Background(), time.Now())
 		defer stop()
-		if err := g.Acquire(deadlineCtx, RequestWrite); !errors.Is(err, context.DeadlineExceeded) {
+		if receipt, err := g.Acquire(deadlineCtx, RequestWrite); receipt != nil || !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("Acquire error = %v, want context.DeadlineExceeded", err)
 		}
 		assertGateUsage(t, g, 0, 0, 0, 0)
-		if err := g.Acquire(context.Background(), RequestRead); err != nil {
+		if _, err := g.Acquire(context.Background(), RequestRead); err != nil {
 			t.Fatal(err)
 		}
 		assertGateUsage(t, g, 1, 1, 1, 1)
@@ -304,7 +308,7 @@ func TestRateLimitGateNormalizesIdleWindows(t *testing.T) {
 		quota := RateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 1, QuarterHourUsage: 1, DailyUsage: 1}
 		g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
 		time.Sleep(72*time.Hour + 7*time.Minute)
-		if err := g.Acquire(context.Background(), RequestRead); err != nil {
+		if _, err := g.Acquire(context.Background(), RequestRead); err != nil {
 			t.Fatal(err)
 		}
 		assertGateUsage(t, g, 1, 1, 1, 1)
@@ -371,7 +375,7 @@ func TestRateLimitGateUnknownRequestKind(t *testing.T) {
 	quota := RateLimitGateQuota{QuarterHourLimit: 1, DailyLimit: 1}
 	g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
 	for _, kind := range []RequestKind{0, -1, RequestWrite + 1} {
-		if err := g.Acquire(context.Background(), kind); err == nil {
+		if receipt, err := g.Acquire(context.Background(), kind); receipt != nil || err == nil {
 			t.Errorf("Acquire accepted unknown request kind %d", kind)
 		}
 	}
