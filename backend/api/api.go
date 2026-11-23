@@ -471,18 +471,19 @@ func (s *Server) webhookCallbackUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if err := s.cacheUpdater.AddDetailedActivity(stravaEvent.ObjectID, stravaEvent.OwnerID); err != nil {
-			slog.Error("Failed to process activity update/create", "activity_id", stravaEvent.ObjectID, "owner_id", stravaEvent.OwnerID, "error", err)
-			http.Error(w, "Failed to process activity", http.StatusInternalServerError)
-			return
-		}
-
-		if stravaEvent.AspectType == "create" {
-			go s.cacheUpdater.WriteUniqueDistanceDescription(stravaEvent.ObjectID, stravaEvent.OwnerID)
-		}
-		// Respond to Strava first to avoid webhook retries, then purge cache asynchronously.
+		// Strava expects a response within 2 seconds, but fetching the activity
+		// may wait for rate limits, so process the event in the background.
 		w.WriteHeader(http.StatusOK)
-		go s.purgeTileCache(stravaEvent.OwnerID)
+		go func() {
+			if err := s.cacheUpdater.AddDetailedActivity(stravaEvent.ObjectID, stravaEvent.OwnerID); err != nil {
+				slog.Error("Failed to process activity update/create", "activity_id", stravaEvent.ObjectID, "owner_id", stravaEvent.OwnerID, "error", err)
+				return
+			}
+			if stravaEvent.AspectType == "create" {
+				go s.cacheUpdater.WriteUniqueDistanceDescription(stravaEvent.ObjectID, stravaEvent.OwnerID)
+			}
+			s.purgeTileCache(stravaEvent.OwnerID)
+		}()
 		return
 	} else {
 		slog.Info("Unhandled aspect type in webhook event", "aspect_type", stravaEvent.AspectType)
