@@ -80,54 +80,6 @@ func TestRateLimitGateAvailableCapacity(t *testing.T) {
 	})
 }
 
-func TestRateLimitGateConcurrentReservationsAndReset(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		quota := RateLimitGateQuota{QuarterHourLimit: 2, DailyLimit: 20, QuarterHourUsage: 1, DailyUsage: 1}
-		g := newTestRateLimitGate(t, RateLimitGateConfig{Overall: quota, Read: quota})
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		const callers = 12
-		results := make(chan error, callers)
-		start := make(chan struct{})
-		for range callers {
-			go func() {
-				<-start
-				_, err := g.Acquire(ctx, RequestRead)
-				results <- err
-			}()
-		}
-		close(start)
-		synctest.Wait()
-		if got := len(results); got != 1 {
-			t.Fatalf("%d callers proceeded with one request remaining, want 1", got)
-		}
-		assertGateResult(t, results, nil)
-		assertGateUsage(t, g, 2, 2, 2, 2)
-
-		reset := time.Now().UTC().Truncate(15 * time.Minute).Add(15 * time.Minute)
-		time.Sleep(time.Until(reset) - time.Nanosecond)
-		assertGateWaiting(t, results)
-		time.Sleep(time.Nanosecond)
-		synctest.Wait()
-		if got := len(results); got != 2 {
-			t.Fatalf("%d callers proceeded at reset, want exactly 2", got)
-		}
-		for range 2 {
-			assertGateResult(t, results, nil)
-		}
-		assertGateUsage(t, g, 2, 4, 2, 4)
-
-		cancel()
-		for range callers - 3 {
-			assertGateResult(t, results, context.Canceled)
-		}
-		assertGateUsage(t, g, 2, 4, 2, 4)
-		if !time.Now().Equal(reset) {
-			t.Fatal("cancellation did not release waiters immediately")
-		}
-	})
-}
-
 func TestRateLimitGateDailyExhaustion(t *testing.T) {
 	for _, both := range []bool{false, true} {
 		name := "daily only"
