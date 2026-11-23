@@ -31,12 +31,21 @@ type cacheQueries interface {
 
 var _ cacheQueries = (*db.Queries)(nil)
 
+// activityAPI contains the Strava operations used by CacheUpdater.
+type activityAPI interface {
+	GetAthleteSummaryActivities(athleteID int64, maxPages int) ([]swagger.SummaryActivity, error)
+	GetDetailedActivityByID(activityID, athleteID int64) (*swagger.DetailedActivity, error)
+	UpdateActivityDescription(activityID, athleteID int64, description string) error
+}
+
+var _ activityAPI = (*StravaAPI)(nil)
+
 type CacheUpdater struct {
 	db        *pgxpool.Pool
 	queries   cacheQueries
 	dbMutex   sync.Mutex
 	cfg       *config.Config
-	stravaAPI *StravaAPI
+	stravaAPI activityAPI
 }
 
 func NewCacheUpdater(pool *pgxpool.Pool, cfg *config.Config, api *StravaAPI) *CacheUpdater {
