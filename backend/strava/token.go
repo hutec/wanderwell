@@ -1,6 +1,7 @@
 package strava
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,8 +17,8 @@ type TokenResponse struct {
 	AccessToken  string `json:"access_token"`
 }
 
-// RefreshToken updates the access credentials from the Strava API using a refresh token
-func refreshToken(refreshToken, clientID, clientSecret string) (*TokenResponse, error) {
+// refreshToken updates the access credentials from the Strava API using a refresh token.
+func refreshToken(ctx context.Context, refreshToken, clientID, clientSecret string) (*TokenResponse, error) {
 	url := "https://www.strava.com/api/v3/oauth/token"
 
 	payload := strings.NewReader(fmt.Sprintf(
@@ -25,7 +26,7 @@ func refreshToken(refreshToken, clientID, clientSecret string) (*TokenResponse, 
 		clientID, clientSecret, refreshToken,
 	))
 
-	req, err := http.NewRequest("POST", url, payload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

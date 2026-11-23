@@ -76,7 +76,12 @@ func main() {
 		slog.Error("Error ensuring database schema", "err", err)
 	}
 
-	stravaApi := strava.NewStravaAPI(db, cfg)
+	stravaApi, err := strava.NewStravaAPI(db, cfg)
+	if err != nil {
+		slog.Error("Error initializing Strava API", "err", err)
+		return
+	}
+	defer stravaApi.Shutdown() // Stop workers before the deferred DB close.
 	cacheUpdater := strava.NewCacheUpdater(db, cfg, stravaApi)
 
 	scope := "read,activity:read_all,activity:write,profile:read_all"
