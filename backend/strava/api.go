@@ -16,9 +16,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// tokenQueries contains the database operations used for Strava authentication.
+type tokenQueries interface {
+	GetAthleteTokens(ctx context.Context, id int64) (db.GetAthleteTokensRow, error)
+	UpdateAthleteTokens(ctx context.Context, arg db.UpdateAthleteTokensParams) error
+}
+
+var _ tokenQueries = (*db.Queries)(nil)
+
 // API wrapper that handles authentication and requests to Strava's API.
 type StravaAPI struct {
-	queries   *db.Queries
+	queries   tokenQueries
 	dbMutex   sync.Mutex
 	cfg       *config.Config
 	apiClient *swagger.APIClient
